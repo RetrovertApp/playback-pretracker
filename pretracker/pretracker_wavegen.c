@@ -254,8 +254,8 @@ static void gen_tonal(PlayerState* player, const WaveInfo* wi, f32* osc_buf, i32
 static i32 calc_filter_coeff(i32 flt_pos, i32* flt_speed, i32* next_pos, i32 flt_min, i32 flt_max,
                              const WaveInfo* wi) {
     if (*flt_speed > 0) {
-        // Boundary clamp: position past max AND past absolute ceiling
-        if (flt_pos > flt_max && flt_pos > 0xFF00 && *next_pos > 0xFEFF) {
+        // Boundary clamp: position past max and crossing the absolute ceiling
+        if (flt_pos > flt_max && flt_pos <= 0xFF00 && *next_pos > 0xFEFF) {
             *flt_speed = -*flt_speed;
             *next_pos = 0xFF00;
             return 0;
