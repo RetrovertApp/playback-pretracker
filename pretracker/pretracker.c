@@ -497,13 +497,14 @@ static void gen_tonal(MyPlayer* player, const WaveInfo* wi, f32* osc_buf, i16 oc
 // Handles boundary clamping, direction reversal, and normal interpolation.
 // Matches the coefficient logic in raspberry_casket.asm:1542-1640
 
-static f32 calc_filter_coeff(i32 flt_pos, i32* flt_speed, i32* next_pos, i32 flt_min, i32 flt_max, const WaveInfo* wi) {
+static i32 calc_filter_coeff(i32 flt_pos, i32* flt_speed, i32* next_pos, i32 flt_min, i32 flt_max,
+                             const WaveInfo* wi) {
     if (*flt_speed > 0) {
         // Boundary clamp: position past max AND past absolute ceiling
         if (flt_pos > flt_max && flt_pos > 0xFF00 && *next_pos > 0xFEFF) {
             *flt_speed = -*flt_speed;
             *next_pos = 0xFF00;
-            return 0.0f;
+            return 0;
         }
         // Reached max: position hasn't passed max yet, but next_pos crosses it
         if (flt_pos <= flt_max && *next_pos >= flt_max) {
@@ -513,14 +514,14 @@ static f32 calc_filter_coeff(i32 flt_pos, i32* flt_speed, i32* next_pos, i32 flt
                 *flt_speed = -*flt_speed;
                 *next_pos = flt_max;
             }
-            return (f32)(u8)(~(u8)wi->flt_max) / 256.0f;
+            return (u8)(~(u8)wi->flt_max);
         }
     } else {
         // Boundary clamp: position below min AND next_pos crosses zero
         if (flt_pos < flt_min && flt_pos >= 0 && *next_pos <= 0) {
             *flt_speed = -*flt_speed;
             *next_pos = 0;
-            return 255.0f / 256.0f;
+            return 255;
         }
         // Reached min: position hasn't passed min yet, but next_pos crosses it
         if (flt_pos >= flt_min && *next_pos <= flt_min) {
@@ -528,12 +529,18 @@ static f32 calc_filter_coeff(i32 flt_pos, i32* flt_speed, i32* next_pos, i32 flt
             if (flt_min != flt_max) {
                 *flt_speed = -*flt_speed;
             }
-            return (f32)(u8)(~(u8)wi->flt_min) / 256.0f;
+            return (u8)(~(u8)wi->flt_min);
         }
     }
 
     // Normal case: coefficient from interpolated position
-    return (f32)(u8)(~(u8)(*next_pos >> 8)) / 256.0f;
+    return (u8)(~(u8)(*next_pos >> 8));
+}
+
+// The reference floors every coefficient product to a signed sample LSB. Keep
+// the taps in normalized floating point, but retain that audible deadband.
+static inline f32 floor_filter_lsb(f32 value) {
+    return floorf(value * 128.0f) / 128.0f;
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -557,13 +564,13 @@ static void gen_filter(MyPlayer* player, const WaveInfo* wi) {
 
     while (out < player->wg_curr_samend_ptr) {
         i32 next_pos = flt_pos + flt_speed;
-        f32 d2_coeff = calc_filter_coeff(flt_pos, &flt_speed, &next_pos, flt_min, flt_max, wi);
+        i32 d2 = calc_filter_coeff(flt_pos, &flt_speed, &next_pos, flt_min, flt_max, wi);
 
         // Adjust for highpass/notch (types 2 and 4)
         if (!(flt_type & 1)) {
-            d2_coeff = 1.0f - d2_coeff;
+            d2 = 255 - d2;
         }
-        f32 d0_coeff = d2_coeff * 2.0f;
+        i32 d0 = d2 * 2;
 
         // Resonance
         i16 d7_resonance = wi->flt_resonance;
@@ -572,9 +579,11 @@ static void gen_filter(MyPlayer* player, const WaveInfo* wi) {
             if (res_divisor < 0x36) {
                 res_divisor = 0x36;
             }
-            f32 res_adj = d2_coeff * 256.0f / (f32)res_divisor;
-            d0_coeff = d2_coeff + res_adj;
+            d0 = d2 + (d2 * 256) / res_divisor;
         }
+
+        f32 d2_coeff = (f32)d2 / 256.0f;
+        f32 d0_coeff = (f32)d0 / 256.0f;
 
         // Process chunk (64 samples at Amiga rate, scaled for HQ)
         f32* chunk_end = out + (64 * HQ_MAX_PERIOD / AMIGA_MAX_PERIOD);
@@ -586,22 +595,22 @@ static void gen_filter(MyPlayer* player, const WaveInfo* wi) {
             f32 input = *out;
 
             f32 d7 = taps[0] - taps[1];
-            d7 = d7 * d0_coeff;
+            d7 = floor_filter_lsb(d7 * d0_coeff);
             d7 -= taps[0];
             d7 += input;
-            d7 = d7 * d2_coeff;
+            d7 = floor_filter_lsb(d7 * d2_coeff);
             taps[0] += d7;
 
             d7 = taps[0] - taps[1];
-            d7 = d7 * d2_coeff;
+            d7 = floor_filter_lsb(d7 * d2_coeff);
             taps[1] += d7;
 
             d7 = taps[1] - taps[2];
-            d7 = d7 * d2_coeff;
+            d7 = floor_filter_lsb(d7 * d2_coeff);
             taps[2] += d7;
 
             d7 = taps[2] - taps[3];
-            d7 = d7 * d2_coeff;
+            d7 = floor_filter_lsb(d7 * d2_coeff);
             taps[3] += d7;
 
             d7 = taps[3];
@@ -617,7 +626,7 @@ static void gen_filter(MyPlayer* player, const WaveInfo* wi) {
                     d7 -= taps[0];
                     d7 -= taps[1];
                     d7 -= taps[2];
-                    d7 *= 0.5f;
+                    d7 = floor_filter_lsb(d7 * 0.5f);
                     break;
                 case FILTER_NOTCH:
                     d7 -= taps[0];
@@ -631,6 +640,16 @@ static void gen_filter(MyPlayer* player, const WaveInfo* wi) {
         flt_pos = next_pos;
     }
 }
+
+#ifdef PRETRACKER_TESTING
+void pretracker_test_gen_filter(f32* samples, u16 length, const WaveInfo* wi) {
+    MyPlayer player = { 0 };
+    player.wg_curr_sample_ptr = samples;
+    player.wg_curr_samend_ptr = samples + length;
+    player.wg_curr_sample_len = length;
+    gen_filter(&player, wi);
+}
+#endif
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Modulator (chorus/delay effect)

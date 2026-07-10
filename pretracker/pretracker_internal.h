@@ -155,6 +155,10 @@ typedef enum {
     FILTER_NOTCH    = 4,
 } FilterType;
 
+#ifdef PRETRACKER_TESTING
+void pretracker_test_gen_filter(f32* samples, u16 length, const WaveInfo* wi);
+#endif
+
 // Mod density bit field layout (wi_mod_density_b)
 #define MOD_DENSITY_MASK   0x07  // bits 0-2: density count
 #define MOD_UNISONO_SHIFT  3     // bits 3-4: unisono detune

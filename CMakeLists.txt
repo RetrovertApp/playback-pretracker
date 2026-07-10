@@ -1,0 +1,18 @@
+cmake_minimum_required(VERSION 3.16)
+project(playback_pretracker C)
+
+add_library(pretracker STATIC pretracker/pretracker.c)
+target_include_directories(pretracker PUBLIC pretracker)
+target_compile_features(pretracker PUBLIC c_std_11)
+
+include(CTest)
+if(BUILD_TESTING)
+    add_executable(filter_tests tests/filter_tests.c pretracker/pretracker.c)
+    target_compile_definitions(filter_tests PRIVATE PRETRACKER_TESTING)
+    target_include_directories(filter_tests PRIVATE pretracker)
+    target_compile_features(filter_tests PRIVATE c_std_11)
+    if(NOT MSVC)
+        target_link_libraries(filter_tests PRIVATE m)
+    endif()
+    add_test(NAME filter_tests COMMAND filter_tests)
+endif()
