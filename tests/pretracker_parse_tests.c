@@ -121,12 +121,20 @@ static void test_extreme_tonal_note_clamps_oscillator_index(void) {
     pretracker_wavegen_generate(&player);
 
     OscNoteBuffers* oscillator = &player.osc_buffers[7];
-    assert(samples[2] == oscillator->saw_waves[0]);
+    assert(samples[2] == pretracker_clamp_sample(oscillator->saw_waves[0]));
     assert(samples[3] == oscillator->saw_waves[oscillator->wave_length - 1]);
     for (int i = 2; i < 2 + HQ_MAX_PERIOD; ++i) {
         assert(samples[i] >= -1.0f);
-        assert(samples[i] <= 1.0f);
+        assert(samples[i] <= 127.0f / 128.0f);
     }
+}
+
+static void test_sample_clamp_matches_signed_byte_rails(void) {
+    assert(pretracker_clamp_sample(-2.0f) == -1.0f);
+    assert(pretracker_clamp_sample(-1.0f) == -1.0f);
+    assert(pretracker_clamp_sample(0.5f) == 0.5f);
+    assert(pretracker_clamp_sample(127.0f / 128.0f) == 127.0f / 128.0f);
+    assert(pretracker_clamp_sample(1.0f) == 127.0f / 128.0f);
 }
 
 static void test_rejects_truncated_old_layouts(void) {
@@ -258,6 +266,7 @@ int main(void) {
     test_public_track_bounds();
     test_player_skips_missing_pattern_pointer();
     test_extreme_tonal_note_clamps_oscillator_index();
+    test_sample_clamp_matches_signed_byte_rails();
     test_rejects_truncated_old_layouts();
     test_empty_layouts_remain_bounded();
     test_rejects_invalid_position_pattern();

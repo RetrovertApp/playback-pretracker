@@ -22,8 +22,8 @@ static inline u32 read_be32(const u8* p) {
 }
 
 static inline f32 pretracker_clamp_sample(f32 x) {
-    if (x > 1.0f)
-        return 1.0f;
+    if (x > 127.0f / 128.0f)
+        return 127.0f / 128.0f;
     if (x < -1.0f)
         return -1.0f;
     return x;
