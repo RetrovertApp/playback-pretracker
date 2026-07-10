@@ -309,10 +309,10 @@ static void gen_filter(PlayerState* player, const WaveInfo* wi) {
 
     f32 taps[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
 
-    i32 flt_pos = (i32)wi->flt_start << 8;
-    i32 flt_min = (i32)wi->flt_min << 8;
-    i32 flt_max = (i32)wi->flt_max << 8;
-    i32 flt_speed = (i32)(i8)wi->flt_speed << 7;
+    i32 flt_pos = (i32)wi->flt_start * 256;
+    i32 flt_min = (i32)wi->flt_min * 256;
+    i32 flt_max = (i32)wi->flt_max * 256;
+    i32 flt_speed = (i32)(i8)wi->flt_speed * 128;
 
     f32* out = player->wg_curr_sample_ptr;
 
@@ -469,7 +469,7 @@ static bool gen_vol_attack(f32** out_ptr, i32* remaining, const WaveInfo* wi, bo
     }
 
     if (vol_fast) {
-        vol_inc <<= 4;
+        vol_inc *= 16;
     }
 
     // Scale vol_inc for HQ rate so attack duration in musical time stays the same
@@ -566,7 +566,7 @@ static bool gen_vol_decay(f32** out_ptr, i32* remaining, const WaveInfo* wi, boo
     if (vol_fast) {
         d3_pos = 0;
     } else {
-        d3_pos = (i32)decay_val << 12; // lsl.w #8; lsl.l #4
+        d3_pos = (i32)decay_val * 4096; // lsl.w #8; lsl.l #4
     }
 
     u16 table_idx = (u16)(d3_pos >> 16);
@@ -696,7 +696,7 @@ static void gen_chord_tone(PlayerState* player, const WaveInfo* wi, i16 note, bo
     // d6 = 0x8000 shifted by octave
     i32 d6 = 0x8000;
     if (octave > 0) {
-        d6 <<= octave;
+        d6 *= (i32)(1u << octave);
     } else if (octave < 0) {
         d6 >>= (-octave);
     }
@@ -714,24 +714,24 @@ static void gen_chord_tone(PlayerState* player, const WaveInfo* wi, i16 note, bo
             if (octave < 0) {
                 pitch_ramp_val = 0;
             } else {
-                pitch_ramp_val <<= octave;
+                pitch_ramp_val *= (i32)(1u << octave);
             }
             pitch_ramp_val += pitch_ramp_val;
         } else {
             pitch_ramp_val = pitch_ramp_val * pitch_ramp_val;
         }
     }
-    i32 d2_ramp = pitch_ramp_val << 10;
+    i32 d2_ramp = pitch_ramp_val * 1024;
 
-    i32 d7_period = (i32)onb->wave_length << 15;
+    i32 d7_period = (i32)onb->wave_length * 32768;
     i16 phase_scale = (15 - octave) * 8;
 
     i32 phase_min = (i32)wi->osc_phase_min * phase_scale;
-    phase_min <<= 6;
+    phase_min *= 64;
     i32 phase_max = (i32)wi->osc_phase_max * phase_scale;
-    phase_max <<= 6;
+    phase_max *= 64;
 
-    i32 phase_speed = (i32)wi->osc_phase_spd << 11;
+    i32 phase_speed = (i32)wi->osc_phase_spd * 2048;
     i32 a5_limit = phase_max;
 
     if (phase_max < phase_min) {

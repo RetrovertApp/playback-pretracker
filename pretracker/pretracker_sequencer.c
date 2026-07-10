@@ -124,7 +124,7 @@ void pretracker_init_channel(PerChannelData* pcd, const SongState* song, u8 chan
     pcd->track_delay_vol16 = 0;
     pcd->track_init_delay = 0;
     pcd->channel_num = channel_num;
-    pcd->channel_mask = (u8)(1 << channel_num);
+    pcd->channel_mask = (u8)(1u << channel_num);
 }
 
 void pretracker_player_init(PlayerState* player, f32* sample_buffer, SongState* song) {
@@ -142,9 +142,8 @@ void pretracker_player_init(PlayerState* player, f32* sample_buffer, SongState* 
 
     u16* period = player->period_table;
     for (int note = 0; note < 3 * NOTES_IN_OCTAVE; note++) {
-        i32 current = (i32)s_period_table[note] << 16;
-        i32 increment = ((i32)s_period_table[note + 1] - (i32)s_period_table[note]) << 16;
-        increment >>= 4;
+        i32 current = (i32)s_period_table[note] * 65536;
+        i32 increment = ((i32)s_period_table[note + 1] - (i32)s_period_table[note]) * 4096;
         for (int fine = 0; fine < 16; fine++) {
             *period++ = (u16)((u32)current >> 16);
             current += increment;
@@ -996,7 +995,7 @@ static void resolve_arpeggio_and_second_instrument(PerChannelData* pcd, SongStat
     }
 
     resolution->pitch_shift += 1;
-    resolution->pitch_shift <<= 4;
+    resolution->pitch_shift *= 16;
     if (second_instrument == 0) {
         memset(pcd->arp_notes, 0, 4);
         pcd->inst_pitch = 0x10;
@@ -1032,7 +1031,7 @@ static void resolve_pattern_note(PerChannelData* pcd, SongState* song, PatternRe
         return;
 
     resolution->pitch_shift += resolution->pitch;
-    resolution->pitch_shift <<= 4;
+    resolution->pitch_shift *= 16;
     if (resolution->inst_num4 != 0 && resolution->effect_cmd != PAT_CMD_TONE_PORTAMENTO)
         load_instrument(pcd, song, resolution->inst_num4, INST_RESET_ALL);
     resolution->resolve_portamento = true;

@@ -33,6 +33,17 @@ cmake -S . -B build
 cmake --build build
 ```
 
+To run the tests with AddressSanitizer and UndefinedBehaviorSanitizer enabled,
+use a separate build directory with Clang or GCC:
+
+```sh
+cmake -S . -B build-sanitized \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DPRETRACKER_ENABLE_SANITIZERS=ON
+cmake --build build-sanitized
+ctest --test-dir build-sanitized --output-on-failure
+```
+
 For manual integration, compile every `pretracker/*.c` source as C11 and link
 the math library on platforms that require it. The core has no other external
 dependencies.

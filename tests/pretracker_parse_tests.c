@@ -163,6 +163,80 @@ static void test_extreme_tonal_note_clamps_oscillator_index(void) {
     }
 }
 
+static void test_fixed_point_period_interpolation(void) {
+    SongState song;
+    PlayerState player;
+    f32 samples[2] = {0};
+    memset(&song, 0, sizeof(song));
+
+    pretracker_player_init(&player, samples, &song);
+
+    const u16 first_semitone[] = {
+        0x350, 0x34D, 0x34A, 0x347, 0x344, 0x341, 0x33E, 0x33B,
+        0x338, 0x335, 0x332, 0x32F, 0x32C, 0x329, 0x326, 0x323,
+    };
+    assert(memcmp(player.period_table, first_semitone, sizeof(first_semitone)) == 0);
+}
+
+static void test_negative_position_transposition(void) {
+    SongState song;
+    PlayerState player;
+    WaveInfo wave;
+    u8 positions[NUM_CHANNELS * 2] = {1, 0xFE};
+    u8 pattern[3] = {1, 0, 0};
+    f32 samples[2 + HQ_MAX_PERIOD] = {0};
+    memset(&song, 0, sizeof(song));
+    memset(&wave, 0, sizeof(wave));
+
+    song.num_waves = 1;
+    song.num_patterns = 1;
+    song.num_steps = 1;
+    song.pat_pos_len = 1;
+    song.pos_data_adr = positions;
+    song.patterns_ptr = pattern;
+    song.waveinfo_ptr = &wave;
+    song.waveinfo_table[0] = &wave;
+    song.wavelength_table[0] = HQ_MAX_PERIOD;
+    song.wavetotal_table[0] = HQ_MAX_PERIOD;
+
+    pretracker_player_init(&player, samples, &song);
+    pretracker_player_start(&player, &song);
+    pretracker_player_tick(&player);
+
+    assert(player.channeldata[0].inst_curr_port_pitch == -16);
+}
+
+static void test_negative_filter_and_pitch_ramp(void) {
+    SongState song;
+    PlayerState player;
+    WaveInfo wave;
+    f32 samples[2 + HQ_MAX_PERIOD] = {0};
+    memset(&song, 0, sizeof(song));
+    memset(&wave, 0, sizeof(wave));
+
+    wave.osc_gain = 128;
+    wave.vol_sustain = 0xFF;
+    wave.pitch_ramp = 0xFF;
+    wave.flags = WI_FLAG_PITCH_LINEAR;
+    wave.flt_type = FILTER_LOWPASS;
+    wave.flt_start = 128;
+    wave.flt_max = 255;
+    wave.flt_speed = 0xFF;
+    song.num_waves = 1;
+    song.waveinfo_table[0] = &wave;
+    song.wavelength_table[0] = HQ_MAX_PERIOD;
+    song.wavetotal_table[0] = HQ_MAX_PERIOD;
+
+    pretracker_player_init(&player, samples, &song);
+    pretracker_wavegen_generate(&player);
+
+    const f32 expected[] = {
+        0.0546875f, 0.1875f, 0.375f, 0.5703125f, 0.7421875f, 0.8671875f,
+        0.9375f, 0.9609375f, 0.9609375f, 0.9453125f, 0.921875f, 0.890625f,
+    };
+    assert(memcmp(samples + 2, expected, sizeof(expected)) == 0);
+}
+
 static void test_sample_clamp_matches_signed_byte_rails(void) {
     assert(pretracker_clamp_sample(-2.0f) == -1.0f);
     assert(pretracker_clamp_sample(-1.0f) == -1.0f);
@@ -342,6 +416,9 @@ int main(void) {
     test_public_track_bounds();
     test_player_skips_missing_pattern_pointer();
     test_extreme_tonal_note_clamps_oscillator_index();
+    test_fixed_point_period_interpolation();
+    test_negative_position_transposition();
+    test_negative_filter_and_pitch_ramp();
     test_sample_clamp_matches_signed_byte_rails();
     test_rejects_truncated_old_layouts();
     test_empty_layouts_remain_bounded();
