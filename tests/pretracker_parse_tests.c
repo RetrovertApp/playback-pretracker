@@ -101,6 +101,34 @@ static void test_player_skips_missing_pattern_pointer(void) {
     assert(player.channeldata[0].new_inst_num == 0);
 }
 
+static void test_extreme_tonal_note_clamps_oscillator_index(void) {
+    SongState song;
+    PlayerState player;
+    WaveInfo wave;
+    f32 samples[2 + HQ_MAX_PERIOD] = {0};
+    memset(&song, 0, sizeof(song));
+    memset(&wave, 0, sizeof(wave));
+
+    wave.osc_basenote = 127;
+    wave.osc_gain = 128;
+    wave.vol_sustain = 0xFF;
+    song.num_waves = 1;
+    song.waveinfo_table[0] = &wave;
+    song.wavelength_table[0] = HQ_MAX_PERIOD;
+    song.wavetotal_table[0] = HQ_MAX_PERIOD;
+
+    pretracker_player_init(&player, samples, &song);
+    pretracker_wavegen_generate(&player);
+
+    OscNoteBuffers* oscillator = &player.osc_buffers[7];
+    assert(samples[2] == oscillator->saw_waves[0]);
+    assert(samples[3] == oscillator->saw_waves[oscillator->wave_length - 1]);
+    for (int i = 2; i < 2 + HQ_MAX_PERIOD; ++i) {
+        assert(samples[i] >= -1.0f);
+        assert(samples[i] <= 1.0f);
+    }
+}
+
 static void test_rejects_truncated_old_layouts(void) {
     u8 data[OLD_SIZE];
     SongState song;
@@ -229,6 +257,7 @@ int main(void) {
     test_old_layout_and_pattern_table();
     test_public_track_bounds();
     test_player_skips_missing_pattern_pointer();
+    test_extreme_tonal_note_clamps_oscillator_index();
     test_rejects_truncated_old_layouts();
     test_empty_layouts_remain_bounded();
     test_rejects_invalid_position_pattern();

@@ -172,7 +172,7 @@ static void gen_tonal(PlayerState* player, const WaveInfo* wi, f32* osc_buf, i32
     f32* out = player->wg_curr_sample_ptr;
     i32 a1_phase = phase_min; // current phase modulation value
     i32 a2_ramp_acc = 0;      // pitch ramp accumulator
-    i32 osc_pos = 0;          // will be set from chord position calc
+    u32 osc_pos = 0;          // will be set from chord position calc
 
     // Calculate initial position (done by caller, stored in d0_pos)
     // The caller passes d2_pitch_ramp for the pitch ramp increment
@@ -187,7 +187,7 @@ static void gen_tonal(PlayerState* player, const WaveInfo* wi, f32* osc_buf, i32
     while (raw_pos > d7u) {
         raw_pos -= d7u;
     }
-    osc_pos = (i32)raw_pos;
+    osc_pos = raw_pos;
 
     f32 gain_f = (f32)wi->osc_gain / 128.0f;
     i32 local_speed = osc_speed;
@@ -196,11 +196,12 @@ static void gen_tonal(PlayerState* player, const WaveInfo* wi, f32* osc_buf, i32
 
     for (;;) {
         // Fetch oscillator sample
-        i32 sample_idx = osc_pos - a1_phase;
-        if (sample_idx < 0) {
-            sample_idx = 0;
+        u32 sample_offset = osc_pos - (u32)a1_phase;
+        i32 sample_idx = (sample_offset & 0x80000000u) ? 0 : (i32)(sample_offset >> 15);
+        i32 wave_length = d7_period >> 15;
+        if (sample_idx >= wave_length) {
+            sample_idx = wave_length - 1;
         }
-        sample_idx >>= 15; // asr.l #8 + asr.l #7
         f32 osc_sample = osc_buf[sample_idx];
 
         // Apply gain and mix with existing sample
@@ -208,9 +209,9 @@ static void gen_tonal(PlayerState* player, const WaveInfo* wi, f32* osc_buf, i32
         out++;
 
         // Advance position
-        osc_pos += local_speed;
-        if (osc_pos >= d7_period) {
-            osc_pos -= d7_period;
+        osc_pos += (u32)local_speed;
+        if (osc_pos < 0x80000000u && osc_pos >= (u32)d7_period) {
+            osc_pos -= (u32)d7_period;
 
             // Phase oscillation
             a1_phase += local_phase_speed;
