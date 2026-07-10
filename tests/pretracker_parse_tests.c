@@ -1,6 +1,7 @@
 #include "pretracker_internal.h"
 
 #include <assert.h>
+#include <math.h>
 #include <string.h>
 
 #define OLD_SIZE 0xD2
@@ -500,6 +501,47 @@ static void test_mixer_sample_rate_timing(void) {
     assert(mixer.samples_per_tick == 960);
 }
 
+static void assert_public_stereo_mix(f32 mix, bool configure, f32 expected_left, f32 expected_right) {
+    u8 data[OLD_SIZE];
+    f32 samples[2] = {0.5f, 0.5f};
+    f32 output[2];
+    make_old_song(data);
+    PreSong* song = pre_song_create(data, sizeof(data));
+    assert(song != NULL);
+    if (configure)
+        pre_song_set_stereo_mix(song, mix);
+    pre_song_start(song);
+
+    MixerChannel* channel = &song->mixer.channels[0];
+    channel->active = true;
+    channel->sample_data = samples;
+    channel->sample_length = 2;
+    channel->loop_offset = 0xFFFF;
+    channel->volume = 1.0f;
+    channel->prev_volume = 1.0f;
+    channel->prev_sample = 0.25f;
+    channel->pan_left = 1.0f;
+    channel->pan_right = 0.0f;
+    song->mixer.samples_until_tick = 1;
+
+    assert(pre_song_decode(song, output, 1) == 1);
+    assert(fabsf(output[0] - expected_left) < 0.000001f);
+    assert(fabsf(output[1] - expected_right) < 0.000001f);
+    pre_song_destroy(song);
+}
+
+static void test_public_stereo_mix_normalization(void) {
+    assert_public_stereo_mix(0.0f, false, 0.25f, 0.0f);
+    assert_public_stereo_mix(0.0f, true, 0.25f, 0.0f);
+    assert_public_stereo_mix(1.0f, true, 0.125f, 0.125f);
+    assert_public_stereo_mix(0.25f, true, 0.2f, 0.05f);
+    assert_public_stereo_mix(-0.25f, true, 0.25f, 0.0f);
+    assert_public_stereo_mix(1.25f, true, 0.125f, 0.125f);
+    assert_public_stereo_mix(NAN, true, 0.25f, 0.0f);
+    assert_public_stereo_mix(INFINITY, true, 0.25f, 0.0f);
+    assert_public_stereo_mix(-INFINITY, true, 0.25f, 0.0f);
+}
+
 static void test_rejects_invalid_position_pattern(void) {
     u8 data[OLD_SIZE];
     SongState song;
@@ -644,6 +686,7 @@ int main(void) {
     test_non_positive_scoped_decode_counts_do_not_change_state();
     test_mixer_rejects_non_positive_counts_before_touching_buffers();
     test_mixer_sample_rate_timing();
+    test_public_stereo_mix_normalization();
     test_rejects_invalid_position_pattern();
     test_rejects_invalid_instrument_lookup_index();
     test_rejects_invalid_wave_cross_references();

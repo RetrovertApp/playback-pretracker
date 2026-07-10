@@ -37,6 +37,7 @@ static inline f32 pretracker_clamp_sample(f32 x) {
 typedef struct SongState SongState;
 typedef struct PlayerState PlayerState;
 typedef struct MixerState MixerState;
+typedef struct PreSong PreSong;
 
 // Constants matching raspberry_casket.asm
 #define MAX_VOLUME 64
@@ -400,6 +401,25 @@ struct MixerState {
     u32 haas_write_idx;     // ring buffer write position
     f32* sample_buffer_ptr; // base of sample buffer (for bounds checking)
     u32 sample_buffer_size; // total size of sample buffer
+};
+
+// Opaque publicly; defined here for core implementation and white-box tests.
+struct PreSong {
+    SongState song;
+    PlayerState player;
+    MixerState mixer;
+    PreSongMetadata metadata;
+    PrePlaybackState playback_state;
+    f32* sample_buffer;
+    u8* prt_data;
+    u32 prt_data_size;
+    u32 sample_rate;
+    i32 solo_channel;
+    f32 stereo_mix;
+    f32 stereo_width_ms;
+    u8 interp_mode;
+    int subsong;
+    int last_parsed_subsong;
 };
 
 // Internal subsystem interfaces (not part of the public API)

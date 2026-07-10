@@ -76,13 +76,18 @@ Call these before `pre_song_start` (or between restarts):
 void pre_song_set_sample_rate(struct PreSong* song, uint32_t rate);
 void pre_song_set_subsong(struct PreSong* song, int subsong);
 void pre_song_set_solo_channel(struct PreSong* song, int32_t channel); // -1 = all
-void pre_song_set_stereo_mix(struct PreSong* song, float mix);         // 0.0 = mono, 1.0 = full stereo
+void pre_song_set_stereo_mix(struct PreSong* song, float mix);         // 0.0 = full stereo, 1.0 = mono
 void pre_song_set_stereo_width(struct PreSong* song, float delay_ms);
 void pre_song_set_interp_mode(struct PreSong* song, PreInterpMode mode);
 ```
 
 The minimum sample rate is 50 Hz. Lower values passed to
 `pre_song_set_sample_rate` are normalized to 50 Hz.
+
+The stereo mix defaults to `0.0`, which preserves the Amiga's full hard-panned
+stereo separation. `1.0` produces mono, and intermediate values add
+proportional cross-feed. Finite inputs are clamped to this range; non-finite
+inputs select the `0.0` default.
 
 `PreInterpMode` is either `PRE_INTERP_BLEP` (default — nearest-neighbor + BLEP, matches `PreTracker.exe`) or `PRE_INTERP_SINC` (windowed sinc, cleaner for HQ buffers).
 

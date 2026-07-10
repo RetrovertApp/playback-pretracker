@@ -1,24 +1,7 @@
 #include "pretracker_internal.h"
 
+#include <math.h>
 #include <string.h>
-
-typedef struct PreSong {
-    SongState song;
-    PlayerState player;
-    MixerState mixer;
-    PreSongMetadata metadata;
-    PrePlaybackState playback_state;
-    f32* sample_buffer;
-    u8* prt_data;           // owned copy (WaveInfo pointers reference into it)
-    u32 prt_data_size;
-    u32 sample_rate;        // default 48000
-    i32 solo_channel;       // default -1 (all)
-    f32 stereo_mix;         // default 0.0 (full stereo)
-    f32 stereo_width_ms;    // Haas delay in ms (0.0 = disabled)
-    u8 interp_mode;         // default 0 (BLEP)
-    int subsong;            // default 0
-    int last_parsed_subsong; // tracks which subsong was last parsed
-} PreSong;
 
 static bool fill_metadata(PreSongMetadata* meta, const u8* prt_data, u32 prt_size, const SongState* song) {
     // Song name (20 bytes at offset 0x14) and author (20 bytes at offset 0x28)
@@ -139,8 +122,19 @@ void pre_song_set_solo_channel(PreSong* song, i32 channel) {
 }
 
 
+static f32 normalize_stereo_mix(f32 mix) {
+    if (!isfinite(mix))
+        return 0.0f;
+    if (mix < 0.0f)
+        return 0.0f;
+    if (mix > 1.0f)
+        return 1.0f;
+    return mix;
+}
+
+
 void pre_song_set_stereo_mix(PreSong* song, f32 mix) {
-    song->stereo_mix = mix;
+    song->stereo_mix = normalize_stereo_mix(mix);
 }
 
 

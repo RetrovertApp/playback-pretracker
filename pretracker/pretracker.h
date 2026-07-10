@@ -66,6 +66,8 @@ void pre_song_set_subsong(struct PreSong* song, int subsong);
 // Rates below PRE_MIN_SAMPLE_RATE are normalized to PRE_MIN_SAMPLE_RATE.
 void pre_song_set_sample_rate(struct PreSong* song, uint32_t rate);
 void pre_song_set_solo_channel(struct PreSong* song, int32_t channel);
+// 0.0 = full Amiga hard-panned stereo (default), 1.0 = mono.
+// Finite values are clamped to this range; non-finite values select the default.
 void pre_song_set_stereo_mix(struct PreSong* song, float mix);
 void pre_song_set_interp_mode(struct PreSong* song, PreInterpMode mode);
 void pre_song_set_stereo_width(struct PreSong* song, float delay_ms);
