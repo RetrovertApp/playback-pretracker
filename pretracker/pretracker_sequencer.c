@@ -497,18 +497,18 @@ static void process_subloop(PerChannelData* pcd, PlayerState* player) {
         pcd->out.length = subloop_len;
         u16 subloop_step = scale_offset(read_be16((const u8*)&wi->subloop_step));
         u16 d1_offset;
+        bool move_subloop = false;
 
         if (pcd->wave_offset != 0 && wi->allow_9xx) {
             // Wave offset with subloop (asm:3607-3619)
             d1_offset = scale_offset((u16)pcd->wave_offset << 7);
             pcd->wave_offset = 0;
             if ((i8)pcd->inst_ping_pong_dir >= 0) {
-                d1_offset -= subloop_step;
-            } else {
                 d1_offset += subloop_step;
+            } else {
+                d1_offset -= subloop_step;
             }
-            // Reset wait
-            pcd->inst_subloop_wait = (u16)wi->subloop_wait;
+            move_subloop = true;
         } else {
             // Auto subloop movement (asm:3621-3677)
             pcd->inst_subloop_wait--;
@@ -517,40 +517,44 @@ static void process_subloop(PerChannelData* pcd, PlayerState* player) {
                 pcd->out.loop_offset = pcd->inst_loop_offset;
             } else {
                 d1_offset = pcd->inst_loop_offset;
-                pcd->inst_subloop_wait = (u16)wi->subloop_wait;
+                move_subloop = true;
+            }
+        }
 
-                if ((i8)pcd->inst_ping_pong_dir < 0) {
-                    // Moving forward
-                    d1_offset += subloop_step;
-                    u16 next_end = d1_offset + subloop_len;
-                    u16 loop_end = scale_offset(read_be16((const u8*)&wi->loop_end));
-                    u16 chipram = scale_offset(read_be16((const u8*)&wi->chipram));
-                    u16 boundary = (d1_offset <= loop_end) ? loop_end : chipram;
-                    i16 space = (i16)boundary - (i16)next_end;
-                    if (space <= 0) {
-                        d1_offset += (u16)space;
-                        pcd->inst_ping_pong_dir = 0; // going backwards
-                        if (space == 0) {
-                            pcd->inst_subloop_wait--;
-                        }
-                    }
-                } else {
-                    // Moving backward
-                    d1_offset -= subloop_step;
-                    u16 loop_start = scale_offset(read_be16((const u8*)&wi->loop_start));
-                    i16 diff = (i16)loop_start - (i16)d1_offset;
-                    if (diff >= 0) {
-                        d1_offset = loop_start;
-                        pcd->inst_ping_pong_dir = 0xFF; // going forward
-                        if (diff == 0) {
-                            pcd->inst_subloop_wait--;
-                        }
+        if (move_subloop) {
+            pcd->inst_subloop_wait = (u16)wi->subloop_wait;
+
+            if ((i8)pcd->inst_ping_pong_dir < 0) {
+                // Moving forward
+                d1_offset += subloop_step;
+                u16 next_end = d1_offset + subloop_len;
+                u16 loop_end = scale_offset(read_be16((const u8*)&wi->loop_end));
+                u16 chipram = scale_offset(read_be16((const u8*)&wi->chipram));
+                u16 boundary = (d1_offset <= loop_end) ? loop_end : chipram;
+                i16 space = (i16)boundary - (i16)next_end;
+                if (space <= 0) {
+                    d1_offset += (u16)space;
+                    pcd->inst_ping_pong_dir = 0; // going backwards
+                    if (space == 0) {
+                        pcd->inst_subloop_wait--;
                     }
                 }
-
-                pcd->inst_loop_offset = d1_offset;
-                pcd->out.loop_offset = d1_offset;
+            } else {
+                // Moving backward
+                d1_offset -= subloop_step;
+                u16 loop_start = scale_offset(read_be16((const u8*)&wi->loop_start));
+                i16 diff = (i16)loop_start - (i16)d1_offset;
+                if (diff >= 0) {
+                    d1_offset = loop_start;
+                    pcd->inst_ping_pong_dir = 0xFF; // going forward
+                    if (diff == 0) {
+                        pcd->inst_subloop_wait--;
+                    }
+                }
             }
+
+            pcd->inst_loop_offset = d1_offset;
+            pcd->out.loop_offset = d1_offset;
         }
 
         // Set sample pointer (asm:3684-3685)
