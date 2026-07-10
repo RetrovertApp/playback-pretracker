@@ -452,7 +452,7 @@ static void gen_modulator(PlayerState* player, const WaveInfo* wi) {
 // Returns true if processing should continue to the delay phase, false if done.
 // Matches raspberry_casket.asm:1786-1870
 
-static bool gen_vol_attack(f32** out_ptr, i16* remaining, const WaveInfo* wi, bool boost, bool vol_fast) {
+static bool gen_vol_attack(f32** out_ptr, i32* remaining, const WaveInfo* wi, bool boost, bool vol_fast) {
     u8 attack_val = wi->vol_attack;
     if (attack_val == 0) {
         return true;
@@ -507,7 +507,7 @@ static bool gen_vol_attack(f32** out_ptr, i16* remaining, const WaveInfo* wi, bo
 // Returns true if processing should continue to the decay phase, false if done.
 // Matches raspberry_casket.asm:1871-1944
 
-static bool gen_vol_delay(f32** out_ptr, i16* remaining, const WaveInfo* wi, bool boost) {
+static bool gen_vol_delay(f32** out_ptr, i32* remaining, const WaveInfo* wi, bool boost) {
     u16 delay_len = (u16)(((u32)wi->vol_delay << 4) * HQ_MAX_PERIOD / AMIGA_MAX_PERIOD);
     f32* out = *out_ptr;
 
@@ -551,7 +551,7 @@ static bool gen_vol_delay(f32** out_ptr, i16* remaining, const WaveInfo* wi, boo
 // Returns true if processing should continue to the sustain phase, false if done.
 // Matches raspberry_casket.asm:1945-2038
 
-static bool gen_vol_decay(f32** out_ptr, i16* remaining, const WaveInfo* wi, bool boost, bool vol_fast) {
+static bool gen_vol_decay(f32** out_ptr, i32* remaining, const WaveInfo* wi, bool boost, bool vol_fast) {
     u8 decay_val = wi->vol_decay;
     if (decay_val == 0) {
         return true;
@@ -621,7 +621,7 @@ static bool gen_vol_decay(f32** out_ptr, i16* remaining, const WaveInfo* wi, boo
 // Volume envelope - sustain phase
 // Matches raspberry_casket.asm:2039-2086
 
-static void gen_vol_sustain(f32* out, i16 remaining, const WaveInfo* wi, bool boost) {
+static void gen_vol_sustain(f32* out, i32 remaining, const WaveInfo* wi, bool boost) {
     u8 sustain = wi->vol_sustain;
     if (sustain == 0) {
         while (remaining >= 0) {
@@ -650,7 +650,7 @@ static void gen_vol_sustain(f32* out, i16 remaining, const WaveInfo* wi, bool bo
 
 static void gen_volume_envelope(PlayerState* player, const WaveInfo* wi) {
     f32* out = player->wg_curr_sample_ptr;
-    i16 remaining = (i16)player->wg_curr_sample_len;
+    i32 remaining = (i32)player->wg_curr_sample_len;
     if (remaining == 0) {
         return;
     }
