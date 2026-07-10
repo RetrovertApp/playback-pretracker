@@ -91,6 +91,7 @@ void pretracker_init_channel(PerChannelData* pcd, const SongState* song, u8 chan
     pcd->pat_pitch_slide = 0;
     pcd->pat_vol_ramp_speed = 0;
     pcd->pat_2nd_inst_num4 = 0;
+    pcd->pat_2nd_inst_delay = 0;
     pcd->inst_pitch = 0x10;
     pcd->inst_vol = MAX_VOLUME;
     pcd->inst_curr_port_pitch = 0;
@@ -154,9 +155,9 @@ void pretracker_player_init(PlayerState* player, f32* sample_buffer, SongState* 
     player->pat_curr_row = 0;
     player->next_pat_row = 0xFF;
     player->next_pat_pos = 0xFF;
-    player->pat_speed_even = 0x06;
-    player->pat_speed_odd = 0x06;
-    player->pat_line_ticks = 0x06;
+    player->pat_speed_even = DEFAULT_PATTERN_SPEED;
+    player->pat_speed_odd = DEFAULT_PATTERN_SPEED;
+    player->pat_line_ticks = DEFAULT_PATTERN_SPEED;
     player->pat_stopped = 1;
     player->songend_detected = 0;
     for (u8 channel = 0; channel < NUM_CHANNELS; channel++)
@@ -168,7 +169,9 @@ void pretracker_player_start(PlayerState* player, SongState* song) {
     player->pat_curr_row = 0;
     player->next_pat_row = 0xFF;
     player->next_pat_pos = 0xFF;
-    player->pat_line_ticks = player->pat_speed_even;
+    player->pat_speed_even = DEFAULT_PATTERN_SPEED;
+    player->pat_speed_odd = DEFAULT_PATTERN_SPEED;
+    player->pat_line_ticks = DEFAULT_PATTERN_SPEED;
     player->pat_stopped = 1;
     player->songend_detected = 0;
     player->trigger_mask = 0;

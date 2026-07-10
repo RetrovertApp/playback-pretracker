@@ -41,6 +41,7 @@ typedef struct MixerState MixerState;
 // Constants matching raspberry_casket.asm
 #define MAX_VOLUME 64
 #define MAX_SPEED 0x2F
+#define DEFAULT_PATTERN_SPEED 0x06
 #define MAX_WAVES 24
 #define MAX_INSTRUMENTS 32
 #define MAX_TRACK_DELAY 32

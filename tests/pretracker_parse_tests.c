@@ -72,6 +72,13 @@ static void make_two_wave_song(u8* data) {
     data[0x97] = 1;
 }
 
+static void make_old_speed_song(u8* data, u8 speed) {
+    make_old_song(data);
+    data[0x3F] = 2;
+    data[0x6B + 1] = PAT_CMD_SET_SPEED;
+    data[0x6B + 2] = speed;
+}
+
 static void test_old_layout_and_pattern_table(void) {
     u8 data[OLD_SIZE];
     SongState song;
@@ -204,6 +211,110 @@ static void test_negative_position_transposition(void) {
     pretracker_player_tick(&player);
 
     assert(player.channeldata[0].inst_curr_port_pitch == -16);
+}
+
+static void test_player_restart_resets_tempo_and_playback_state(void) {
+    SongState song;
+    PlayerState player;
+    f32 samples[2] = {0};
+    memset(&song, 0, sizeof(song));
+
+    pretracker_player_init(&player, samples, &song);
+    song.curr_pat_pos = 3;
+    player.pat_curr_row = 4;
+    player.next_pat_row = 2;
+    player.next_pat_pos = 1;
+    player.pat_speed_even = 4;
+    player.pat_speed_odd = 9;
+    player.pat_line_ticks = 2;
+    player.pat_stopped = 0;
+    player.songend_detected = 1;
+    player.trigger_mask = 0xFFFF;
+    player.channeldata[0].note_delay = 3;
+    player.channeldata[0].note_off_delay = 2;
+    player.channeldata[0].pat_2nd_inst_delay = 1;
+    player.channeldata[0].track_delay_steps = 4;
+
+    pretracker_player_start(&player, &song);
+
+    assert(song.curr_pat_pos == 0);
+    assert(player.pat_curr_row == 0);
+    assert(player.next_pat_row == 0xFF);
+    assert(player.next_pat_pos == 0xFF);
+    assert(player.pat_speed_even == DEFAULT_PATTERN_SPEED);
+    assert(player.pat_speed_odd == DEFAULT_PATTERN_SPEED);
+    assert(player.pat_line_ticks == DEFAULT_PATTERN_SPEED);
+    assert(player.pat_stopped == 1);
+    assert(player.songend_detected == 0);
+    assert(player.trigger_mask == 0);
+    assert(player.channeldata[0].note_delay == 0);
+    assert(player.channeldata[0].note_off_delay == 0);
+    assert(player.channeldata[0].pat_2nd_inst_delay == 0);
+    assert(player.channeldata[0].track_delay_steps == 0);
+}
+
+static void test_public_restart_discards_pattern_tempo_effects(void) {
+    const u8 effects[] = {4, 0x38};
+    const u8 changed_speeds[] = {4, 8};
+
+    for (size_t effect = 0; effect < sizeof(effects) / sizeof(effects[0]); ++effect) {
+        u8 data[OLD_SIZE];
+        f32 output[7 * 2];
+        make_old_speed_song(data, effects[effect]);
+        struct PreSong* song = pre_song_create(data, sizeof(data));
+        assert(song != NULL);
+        pre_song_set_sample_rate(song, PRE_MIN_SAMPLE_RATE);
+
+        pre_song_start(song);
+        assert(pre_song_decode(song, output, 7) == 7);
+        const PrePlaybackState* changed = pre_song_get_playback_state(song);
+        assert(changed->row == 1);
+        assert(changed->speed == changed_speeds[effect]);
+
+        pre_song_start(song);
+        assert(pre_song_decode(song, output, 1) == 1);
+        const PrePlaybackState* restarted = pre_song_get_playback_state(song);
+        assert(restarted->position == 0);
+        assert(restarted->row == 0);
+        assert(restarted->speed == DEFAULT_PATTERN_SPEED);
+        assert(restarted->ticks_remaining == DEFAULT_PATTERN_SPEED - 1);
+        assert(!pre_song_is_finished(song));
+        pre_song_destroy(song);
+    }
+}
+
+static void test_subsong_restart_preserves_layout_and_resets_tempo(void) {
+    u8 data[V15_SIZE];
+    f32 output[7 * 2];
+    u8 track_num;
+    i8 pitch_shift;
+    make_v15_song(data);
+    data[0x6A] = 2;
+    data[0x79] = 7;
+    data[0x83 + 3 + 1] = PAT_CMD_SET_SPEED;
+    data[0x83 + 3 + 2] = 4;
+
+    struct PreSong* song = pre_song_create(data, sizeof(data));
+    assert(song != NULL);
+    pre_song_set_subsong(song, 1);
+    pre_song_set_sample_rate(song, PRE_MIN_SAMPLE_RATE);
+    pre_song_start(song);
+    assert(pre_song_get_metadata(song)->num_steps == 2);
+    assert(pre_song_get_position_entry(song, 0, 0, &track_num, &pitch_shift));
+    assert(track_num == 1);
+    assert(pitch_shift == 7);
+
+    assert(pre_song_decode(song, output, 7) == 7);
+    assert(pre_song_get_playback_state(song)->speed == 4);
+    pre_song_start(song);
+    assert(pre_song_decode(song, output, 1) == 1);
+    assert(pre_song_get_playback_state(song)->speed == DEFAULT_PATTERN_SPEED);
+    assert(pre_song_get_playback_state(song)->ticks_remaining == DEFAULT_PATTERN_SPEED - 1);
+    assert(pre_song_get_position_entry(song, 0, 0, &track_num, &pitch_shift));
+    assert(track_num == 1);
+    assert(pitch_shift == 7);
+    assert(pre_song_get_metadata(song)->num_steps == 2);
+    pre_song_destroy(song);
 }
 
 static void test_negative_filter_and_pitch_ramp(void) {
@@ -521,6 +632,9 @@ int main(void) {
     test_extreme_tonal_note_clamps_oscillator_index();
     test_fixed_point_period_interpolation();
     test_negative_position_transposition();
+    test_player_restart_resets_tempo_and_playback_state();
+    test_public_restart_discards_pattern_tempo_effects();
+    test_subsong_restart_preserves_layout_and_resets_tempo();
     test_negative_filter_and_pitch_ramp();
     test_sample_clamp_matches_signed_byte_rails();
     test_rejects_truncated_old_layouts();
