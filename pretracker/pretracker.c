@@ -641,16 +641,6 @@ static void gen_filter(MyPlayer* player, const WaveInfo* wi) {
     }
 }
 
-#ifdef PRETRACKER_TESTING
-void pretracker_test_gen_filter(f32* samples, u16 length, const WaveInfo* wi) {
-    MyPlayer player = { 0 };
-    player.wg_curr_sample_ptr = samples;
-    player.wg_curr_samend_ptr = samples + length;
-    player.wg_curr_sample_len = length;
-    gen_filter(&player, wi);
-}
-#endif
-
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Modulator (chorus/delay effect)
 // Matches pre_Modulator at raspberry_casket.asm:2204-2288
