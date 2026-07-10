@@ -420,7 +420,7 @@ static void process_pitch(PerChannelData* pcd, PlayerState* player) {
                     u32 curr_off = pcd->out.sam_ptr_offset - (u32)(wave_base - player->sample_buffer_ptr);
                     u16 d6_total = d3_len + (u16)curr_off;
                     u16 d7_remain = chipram - d6_total;
-                    if (d3_len <= d7_remain) {
+                    if (d3_len >= d7_remain) {
                         d3_len = d3_len + d6_total - chipram;
                         d3_len >>= shift;
                     } else {
