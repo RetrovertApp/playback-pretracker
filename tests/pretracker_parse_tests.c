@@ -3,8 +3,8 @@
 #include <assert.h>
 #include <string.h>
 
-#define OLD_SIZE 0xA8
-#define V15_SIZE 0xE8
+#define OLD_SIZE 0xD2
+#define V15_SIZE 0x112
 #define ONE_WAVE_SIZE 0xE2
 #define TWO_WAVE_SIZE 0x10C
 #define ONE_WAVE_INFO_OFFSET 0xB8
@@ -26,6 +26,7 @@ static void make_old_song(u8* data) {
     data[0x3D] = 1;
     data[0x3E] = 1;
     data[0x3F] = 1;
+    data[0x41] = 1;
     data[0x60] = 1;
 }
 
@@ -36,6 +37,7 @@ static void make_v15_song(u8* data) {
     write_be32(data + 0x08, 0x80);
     write_be32(data + 0x0C, 0x90);
     write_be32(data + 0x10, 0xD0);
+    data[0x41] = 1;
     data[0x5A] = 2;
 
     data[0x61] = 1;
@@ -80,6 +82,16 @@ static void test_old_layout_and_pattern_table(void) {
     pretracker_rebuild_pattern_table(&song);
     assert(song.pattern_table[0] == data + 0x68);
     assert(song.pattern_table[1] == NULL);
+}
+
+static void test_rejects_zero_wave_song(void) {
+    u8 data[ONE_WAVE_SIZE];
+    SongState song;
+    make_one_wave_song(data);
+    data[0x41] = 0;
+
+    assert(pretracker_parse_song(&song, data, sizeof(data), 0) == 0);
+    assert(pre_song_create(data, sizeof(data)) == NULL);
 }
 
 static void test_public_track_bounds(void) {
@@ -187,11 +199,10 @@ static void test_empty_layouts_remain_bounded(void) {
     data[0x3C] = 1;
     assert(pretracker_parse_song(&song, data, sizeof(data), 0) != 0);
 
-    u8 playable[OLD_SIZE + sizeof(WaveInfo)];
+    u8 playable[OLD_SIZE];
     memset(playable, 0, sizeof(playable));
     make_old_song(playable);
     playable[0x3E] = 0;
-    playable[0x41] = 1;
     struct PreSong* public_song = pre_song_create(playable, sizeof(playable));
     f32 output[2000 * 2];
     assert(public_song != NULL);
@@ -210,7 +221,7 @@ static void test_rejects_invalid_position_pattern(void) {
 }
 
 static void test_rejects_invalid_instrument_lookup_index(void) {
-    u8 data[0xB8];
+    u8 data[ONE_WAVE_SIZE];
     SongState song;
     const int lookup_fields[] = {0, 1, 2, 3, 4, 6};
     for (size_t i = 0; i < sizeof(lookup_fields) / sizeof(lookup_fields[0]); ++i) {
@@ -262,6 +273,11 @@ static void test_rejects_invalid_wave_cross_references(void) {
     pre_song_destroy(song);
 
     u8 two_wave_data[TWO_WAVE_SIZE];
+    make_two_wave_song(two_wave_data);
+    song = pre_song_create(two_wave_data, sizeof(two_wave_data));
+    assert(song != NULL);
+    pre_song_destroy(song);
+
     make_two_wave_song(two_wave_data);
     two_wave_data[0x43] = 0;
     assert(pre_song_create(two_wave_data, sizeof(two_wave_data)) == NULL);
@@ -322,6 +338,7 @@ static void test_subsong_rebuild_clears_stale_patterns(void) {
 
 int main(void) {
     test_old_layout_and_pattern_table();
+    test_rejects_zero_wave_song();
     test_public_track_bounds();
     test_player_skips_missing_pattern_pointer();
     test_extreme_tonal_note_clamps_oscillator_index();

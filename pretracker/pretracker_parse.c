@@ -188,7 +188,8 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
     }
 
     song->num_waves = prt_data[0x41];
-    if (song->num_waves > MAX_WAVES || posd_offset >= prt_size || patt_offset >= prt_size)
+    if (song->num_waves == 0 || song->num_waves > MAX_WAVES ||
+        posd_offset >= prt_size || patt_offset >= prt_size)
         return 0;
 
     // Skip instrument names
@@ -295,23 +296,21 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
 
     // Calculate sample sizes
     u32 total_chip_mem = 2;
-    if (song->num_waves > 0) {
-        WaveInfo* wi = song->waveinfo_ptr;
-        for (int i = 0; i < song->num_waves; i++) {
-            if (wi->mix_wave > song->num_waves)
-                return 0;
-            song->waveinfo_table[i] = wi;
-            u32 std_len = ((u32)wi->sam_len + 1) * HQ_MAX_PERIOD;
-            song->wavelength_table[i] = std_len;
+    WaveInfo* wi = song->waveinfo_ptr;
+    for (int i = 0; i < song->num_waves; i++) {
+        if (wi->mix_wave > song->num_waves)
+            return 0;
+        song->waveinfo_table[i] = wi;
+        u32 std_len = ((u32)wi->sam_len + 1) * HQ_MAX_PERIOD;
+        song->wavelength_table[i] = std_len;
 
-            u32 total_len = std_len;
-            if (wi->flags & WI_FLAG_EXTRA_OCTAVES) {
-                total_len = (std_len * 15) / 8;
-            }
-            song->wavetotal_table[i] = total_len;
-            total_chip_mem += total_len;
-            wi++;
+        u32 total_len = std_len;
+        if (wi->flags & WI_FLAG_EXTRA_OCTAVES) {
+            total_len = (std_len * 15) / 8;
         }
+        song->wavetotal_table[i] = total_len;
+        total_chip_mem += total_len;
+        wi++;
     }
 
     return total_chip_mem;
