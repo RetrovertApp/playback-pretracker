@@ -131,10 +131,12 @@ static void mixer_sync_channels(PlayerState* player, MixerState* mixer) {
             // Triggered: write both pointer and length (asm:4079-4082)
             mc->sample_length = pcd->out.length;
             u32 off = pcd->out.sam_ptr_offset;
-            if (off + mc->sample_length <= mixer->sample_buffer_size) {
+            if (off <= mixer->sample_buffer_size &&
+                mc->sample_length <= mixer->sample_buffer_size - off) {
                 mc->sample_data = player->sample_buffer_ptr + off;
             } else {
                 mc->sample_data = player->sample_buffer_ptr;
+                mc->sample_length = 0;
             }
             mc->loop_offset = pcd->out.loop_offset;
             mc->frac_pos = 0.0;
@@ -146,16 +148,26 @@ static void mixer_sync_channels(PlayerState* player, MixerState* mixer) {
             // the loop pointer so the render loop can switch to it on first wrap.
             mc->loop_data = nullptr;
             if (pcd->out.loop_offset != 0xFFFF) {
-                u32 loop_off = pcd->out.sam_ptr_offset + pcd->out.loop_offset;
-                if (loop_off + mc->sample_length <= mixer->sample_buffer_size) {
+                u32 loop_off = pcd->out.sam_ptr_offset;
+                if (pcd->out.loop_offset <= UINT32_MAX - loop_off)
+                    loop_off += pcd->out.loop_offset;
+                else
+                    loop_off = UINT32_MAX;
+                if (loop_off <= mixer->sample_buffer_size &&
+                    mc->sample_length <= mixer->sample_buffer_size - loop_off) {
                     mc->loop_data = player->sample_buffer_ptr + loop_off;
                 }
             }
         } else if (pcd->out.loop_offset != 0xFFFF) {
             // Non-triggered looping: set pending loop pointer (asm:4086-4091)
             // Amiga DMA finishes current buffer then reloads from new ac_ptr on wrap.
-            u32 off = pcd->out.sam_ptr_offset + pcd->out.loop_offset;
-            if (off + mc->sample_length <= mixer->sample_buffer_size) {
+            u32 off = pcd->out.sam_ptr_offset;
+            if (pcd->out.loop_offset <= UINT32_MAX - off)
+                off += pcd->out.loop_offset;
+            else
+                off = UINT32_MAX;
+            if (off <= mixer->sample_buffer_size &&
+                mc->sample_length <= mixer->sample_buffer_size - off) {
                 mc->loop_data = player->sample_buffer_ptr + off;
             }
             mc->loop_offset = pcd->out.loop_offset;

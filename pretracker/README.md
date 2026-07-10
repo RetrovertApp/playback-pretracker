@@ -44,6 +44,57 @@ cmake --build build-sanitized
 ctest --test-dir build-sanitized --output-on-failure
 ```
 
+## Parser and playback fuzzing
+
+The local libFuzzer target uses the same AddressSanitizer and
+UndefinedBehaviorSanitizer configuration as the normal tests. It requires
+Clang; hosted fuzzing CI is intentionally out of scope.
+
+```sh
+cmake -S . -B build-fuzz \
+    -DCMAKE_C_COMPILER=clang \
+    -DCMAKE_BUILD_TYPE=Debug \
+    -DPRETRACKER_ENABLE_SANITIZERS=ON \
+    -DPRETRACKER_BUILD_FUZZER=ON
+cmake --build build-fuzz
+ctest --test-dir build-fuzz -R pretracker_fuzz_smoke --output-on-failure
+```
+
+The build generates a small synthetic corpus in `build-fuzz/fuzz-corpus`.
+It contains a legacy 1.1B-layout module and a 1.5-layout module with two
+subsongs; neither seed contains third-party song data. The smoke test uses a
+fixed random seed and 1,000 runs. For a longer deterministic local run:
+
+```sh
+./build-fuzz/pretracker_fuzz \
+    -seed=1337 -max_len=65536 -timeout=5 -max_total_time=60 \
+    -artifact_prefix=build-fuzz/fuzz-artifacts/ \
+    build-fuzz/fuzz-corpus
+```
+
+Every saved input is directly reproducible, independent of the random seed:
+
+```sh
+./build-fuzz/pretracker_fuzz -runs=1 build-fuzz/fuzz-artifacts/crash-<hash>
+```
+
+Minimize it before adding a regression:
+
+```sh
+./build-fuzz/pretracker_fuzz \
+    -minimize_crash=1 \
+    -exact_artifact_path=build-fuzz/fuzz-artifacts/minimized-crash \
+    build-fuzz/fuzz-artifacts/crash-<hash>
+```
+
+Promote the minimized bytes into `tests/pretracker_parse_tests.c`, preferably
+as a small synthetic constructor plus only the byte mutations needed to
+reproduce the fault. Add an assertion for the expected rejection or playback
+behavior, then run the full sanitized CTest suite. If the exact bytes matter,
+`xxd -i build-fuzz/fuzz-artifacts/minimized-crash` can produce a C array; keep
+the generated input only when its provenance is synthetic or otherwise
+license-compatible.
+
 For manual integration, compile every `pretracker/*.c` source as C11 and link
 the math library on platforms that require it. The core has no other external
 dependencies.
