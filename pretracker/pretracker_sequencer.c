@@ -632,6 +632,7 @@ static void activate_wave(PerChannelData* pcd, SongState* song, PlayerState* pla
 
     u16 chipram = scale_offset(read_be16((const u8*)&wi->chipram));
     u16 subloop = scale_offset(read_be16((const u8*)&wi->subloop_len));
+    u16 ping_pong_limit = chipram;
     if (subloop == 0) {
         u16 loop_off = scale_offset(read_be16((const u8*)&wi->loop_offset));
         wave_ptr += loop_off;
@@ -641,6 +642,7 @@ static void activate_wave(PerChannelData* pcd, SongState* song, PlayerState* pla
             u16 length = chipram - loop_off;
             pcd->out.length = length > 1 ? length : 2;
         }
+        ping_pong_limit = pcd->out.length;
         pcd->out.loop_offset = 0xFFFF;
     } else {
         pcd->out.loop_offset = 0;
@@ -648,7 +650,7 @@ static void activate_wave(PerChannelData* pcd, SongState* song, PlayerState* pla
     pcd->out.sam_ptr_offset = (u32)(wave_ptr - player->sample_buffer_ptr);
 
     if (policy == WAVE_ACTIVATE_NOSYNC) {
-        if (chipram < previous_loop)
+        if (ping_pong_limit < previous_loop)
             pcd->inst_ping_pong_dir = 0xFF;
         pcd->inst_subloop_wait = 0;
         u16 step = scale_offset(read_be16((const u8*)&wi->subloop_step));
