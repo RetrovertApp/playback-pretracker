@@ -13,13 +13,29 @@ typedef int32_t i32;
 typedef float f32;
 typedef double f64;
 
+static inline u16 read_be16(const u8* p) {
+    return (u16)((p[0] << 8) | p[1]);
+}
+
+static inline u32 read_be32(const u8* p) {
+    return ((u32)p[0] << 24) | ((u32)p[1] << 16) | ((u32)p[2] << 8) | p[3];
+}
+
+static inline f32 pretracker_clamp_sample(f32 x) {
+    if (x > 1.0f)
+        return 1.0f;
+    if (x < -1.0f)
+        return -1.0f;
+    return x;
+}
+
 #ifndef nullptr
 #define nullptr ((void*)0)
 #endif
 
 // Internal type forward declarations (not exposed in public API)
-typedef struct MySong MySong;
-typedef struct MyPlayer MyPlayer;
+typedef struct SongState SongState;
+typedef struct PlayerState PlayerState;
 typedef struct MixerState MixerState;
 
 // Constants matching raspberry_casket.asm
@@ -31,6 +47,22 @@ typedef struct MixerState MixerState;
 #define NOTE_OFF_PITCH 0x3D
 #define NOTES_IN_OCTAVE 12
 #define NUM_CHANNELS 4
+#define AMIGA_CLOCK 3546895.0
+#define SINC_TAPS 8
+#define SINC_PHASES 128
+
+extern const u16 s_log12_table[NOTES_IN_OCTAVE];
+extern const u8 s_vib_speed_table[16];
+extern const u8 s_vib_depth_table[16];
+extern const u8 s_vib_delay_table[16];
+extern const u8 s_ramp_up_16[16];
+extern const i16 s_fast_roll_off_16[16];
+extern const i16 s_roll_off_table[];
+extern const i16 s_ramp_up_down_32[32];
+extern const u16 s_modulator_ramp_8[8];
+extern const u16 s_period_table[3 * NOTES_IN_OCTAVE + 1];
+extern const f32 s_blep_table[8][5];
+extern const f32 s_sinc_table[SINC_PHASES][SINC_TAPS];
 
 // Amiga base period (samples per waveform cycle at the lowest note)
 #define AMIGA_MAX_PERIOD 128
@@ -201,8 +233,8 @@ typedef struct {
     u16 wave_length;                // $180 owb_wave_length (period for this note)
 } OscNoteBuffers;
 
-// MySong (matches sv_* at raspberry_casket.asm:421-438)
-struct MySong {
+// SongState (matches sv_* at raspberry_casket.asm:421-438)
+struct SongState {
     WaveInfo* waveinfo_table[MAX_WAVES];                // sv_waveinfo_table
     u8* inst_patterns_table[MAX_INSTRUMENTS];            // sv_inst_patterns_table
     u32 wavelength_table[MAX_WAVES];                     // sv_wavelength_table
@@ -316,8 +348,8 @@ typedef struct {
     f32 blep_wrap;          // accumulator value when last transition occurred
 } MixerChannel;
 
-// MyPlayer (matches pv_* at raspberry_casket.asm:549-598)
-struct MyPlayer {
+// PlayerState (matches pv_* at raspberry_casket.asm:549-598)
+struct PlayerState {
     u8 pat_curr_row;
     u8 next_pat_row;
     u8 next_pat_pos;
@@ -329,7 +361,7 @@ struct MyPlayer {
     u8 loop_pattern;
     u8 _pad0;
     u16 trigger_mask;
-    MySong* my_song;
+    SongState* my_song;
     f32* sample_buffer_ptr;
     u32 copperlist_ptr;
     f32* wave_sample_table[MAX_WAVES];
@@ -368,11 +400,16 @@ struct MixerState {
     u32 sample_buffer_size; // total size of sample buffer
 };
 
-// Internal functions (used by test code, not part of public API)
-u32  pre_song_init(MySong* song, u8* prt_data, u32 prt_size, int subsong);
-void pre_player_init(MyPlayer* player, f32* sample_buffer, MySong* song);
-void pre_player_tick(MyPlayer* player);
-void pre_play_init(MixerState* mixer, u32 output_rate);
-void pre_play_start(MyPlayer* player, MySong* song, MixerState* mixer);
-int  pre_play_render(MyPlayer* player, MixerState* mixer, f32* buffer, int num_frames, f32** scopes, int num_scopes);
-bool pre_play_is_finished(const MyPlayer* player);
+// Internal subsystem interfaces (not part of the public API)
+bool pretracker_read_name_record(const u8** cursor, const u8* end, char* output, size_t output_size);
+u32  pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subsong);
+void pretracker_rebuild_pattern_table(SongState* song);
+void pretracker_player_init(PlayerState* player, f32* sample_buffer, SongState* song);
+void pretracker_wavegen_generate(PlayerState* player);
+void pretracker_player_tick(PlayerState* player);
+void pretracker_init_channel(PerChannelData* channel, const SongState* song, u8 channel_num);
+void pretracker_player_start(PlayerState* player, SongState* song);
+void pretracker_mixer_init(MixerState* mixer, u32 output_rate);
+void pretracker_mixer_start(MixerState* mixer, const PlayerState* player, const SongState* song);
+int  pretracker_mixer_render(PlayerState* player, MixerState* mixer, f32* buffer, int num_frames, f32** scopes, int num_scopes);
+bool pretracker_player_is_finished(const PlayerState* player);

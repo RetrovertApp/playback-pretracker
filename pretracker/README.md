@@ -18,10 +18,24 @@ Licensed under MIT (see `LICENSE`).
 ## Files
 
 - `pretracker.h` — public API.
-- `pretracker.c` — implementation.
+- `pretracker.c` — public API facade and metadata queries.
+- `pretracker_parse.c` — module validation and parsing.
+- `pretracker_wavegen.c` — oscillator and waveform synthesis.
+- `pretracker_sequencer.c` — pattern, instrument, ADSR, and tick processing.
+- `pretracker_mixer.c` — interpolation and stereo rendering.
+- `pretracker_tables.c` — immutable playback coefficient data.
 - `pretracker_internal.h` — internal structures (not part of the public API).
 
-Drop these into your project and compile `pretracker.c` as C99 (or later). No external dependencies.
+The repository root provides a CMake target named `pretracker`:
+
+```sh
+cmake -S . -B build
+cmake --build build
+```
+
+For manual integration, compile every `pretracker/*.c` source as C11 and link
+the math library on platforms that require it. The core has no other external
+dependencies.
 
 ## API overview
 
