@@ -211,6 +211,8 @@ void pre_song_start(PreSong* song) {
     // Re-apply subsong if changed (only relevant for V1.5 multi-subsong files)
     if (song->subsong != song->last_parsed_subsong && song->song.num_subsongs > 1) {
         apply_subsong(&song->song, song->prt_data, song->subsong);
+        song->metadata.num_positions = song->song.pat_pos_len;
+        song->metadata.num_steps = song->song.num_steps;
         pretracker_rebuild_pattern_table(&song->song);
         song->last_parsed_subsong = song->subsong;
     }
