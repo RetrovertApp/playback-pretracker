@@ -955,9 +955,8 @@ static bool apply_extended_pattern_command(PerChannelData* pcd, const PatternRes
     return false;
 }
 
-static bool resolve_arpeggio_and_second_instrument(PerChannelData* pcd, SongState* song,
-                                                   PlayerState* player, const PatternRow* row,
-                                                   PatternResolution* resolution) {
+static void resolve_arpeggio_and_second_instrument(PerChannelData* pcd, SongState* song,
+                                                   const PatternRow* row, PatternResolution* resolution) {
     if (row->has_arpeggio) {
         if ((resolution->effect_cmd | resolution->effect_data) != 0) {
             pcd->arp_notes[0] = resolution->effect_cmd;
@@ -966,18 +965,18 @@ static bool resolve_arpeggio_and_second_instrument(PerChannelData* pcd, SongStat
         }
         resolution->arp_flag = 1;
         resolution->effect_cmd = 0;
-        return false;
+        return;
     }
 
     if (resolution->effect_cmd != PAT_CMD_PLAY_2ND_INST || resolution->effect_data == 0)
-        return false;
+        return;
 
     u8 second_instrument = resolution->effect_data & 0x0F;
     u16 second_instrument4 = (u16)second_instrument << 2;
     if (resolution->pitch != 0) {
         resolution->alternate_instrument = (u8)resolution->inst_num4;
         resolution->inst_num4 = second_instrument4;
-        return false;
+        return;
     }
 
     resolution->pitch_shift += 1;
@@ -987,17 +986,14 @@ static bool resolve_arpeggio_and_second_instrument(PerChannelData* pcd, SongStat
         pcd->inst_pitch = 0x10;
         pcd->inst_curr_port_pitch = resolution->pitch_shift;
         pcd->pat_portamento_dest = 0;
-        pcd->pat_vol_ramp_speed = 0;
-        pcd->pat_pitch_slide = 0;
-        process_pattern_effects(pcd, resolution->effect_cmd, resolution->effect_data, player);
-        return true;
+        resolution->alternate_instrument = (u8)resolution->inst_num4;
+        return;
     }
 
     resolution->alternate_instrument = (u8)resolution->inst_num4;
     resolution->inst_num4 = second_instrument4;
     load_instrument(pcd, song, resolution->inst_num4, INST_RESET_ALL);
     resolution->resolve_portamento = true;
-    return false;
 }
 
 static void resolve_pattern_note(PerChannelData* pcd, SongState* song, PatternResolution* resolution) {
@@ -1071,8 +1067,7 @@ static void apply_pattern_row(PerChannelData* pcd, SongState* song, PlayerState*
     if (apply_extended_pattern_command(pcd, &resolution))
         return;
     pcd->note_delay = 0xFF;
-    if (resolve_arpeggio_and_second_instrument(pcd, song, player, &row, &resolution))
-        return;
+    resolve_arpeggio_and_second_instrument(pcd, song, &row, &resolution);
     resolve_pattern_note(pcd, song, &resolution);
     resolve_pattern_portamento(pcd, &resolution);
     finalize_pattern_effect(pcd, player, &resolution);
