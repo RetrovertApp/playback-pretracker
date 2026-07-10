@@ -66,7 +66,9 @@ struct PreSong* pre_song_create(const uint8_t* data, uint32_t size);
 void            pre_song_destroy(struct PreSong* song);
 ```
 
-`pre_song_create` returns `NULL` if the data is not a valid PreTracker module. The song keeps its own copy of whatever state it needs, so the input buffer can be freed after creation.
+`pre_song_create` returns `NULL` if `data` is `NULL` or the data is not a valid
+PreTracker module. The song keeps its own copy of whatever state it needs, so
+the input buffer can be freed after creation.
 
 ### Configuration
 
@@ -89,7 +91,14 @@ stereo separation. `1.0` produces mono, and intermediate values add
 proportional cross-feed. Finite inputs are clamped to this range; non-finite
 inputs select the `0.0` default.
 
-`PreInterpMode` is either `PRE_INTERP_BLEP` (default — nearest-neighbor + BLEP, matches `PreTracker.exe`) or `PRE_INTERP_SINC` (windowed sinc, cleaner for HQ buffers).
+Subsong values outside the module's available range select subsong zero. Solo
+channel values are `-1` (all channels) or 0 through 3; other values select all
+channels. Stereo widths that are non-finite, negative, or zero disable widening,
+and positive delays saturate at the 63-sample maximum without overflowing.
+
+`PreInterpMode` is either `PRE_INTERP_BLEP` (default — nearest-neighbor + BLEP,
+matches `PreTracker.exe`) or `PRE_INTERP_SINC` (windowed sinc, cleaner for HQ
+buffers). Unsupported values select `PRE_INTERP_BLEP`.
 
 ### Playback
 

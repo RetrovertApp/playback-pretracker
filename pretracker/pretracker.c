@@ -47,6 +47,9 @@ static bool fill_metadata(PreSongMetadata* meta, const u8* prt_data, u32 prt_siz
 
 
 PreSong* pre_song_create(const u8* data, u32 size) {
+    if (!data)
+        return nullptr;
+
     PreSong* ps = (PreSong*)calloc(1, sizeof(PreSong));
     if (!ps) {
         return nullptr;
@@ -108,7 +111,7 @@ void pre_song_destroy(PreSong* song) {
 // Public API: configuration setters
 
 void pre_song_set_subsong(PreSong* song, int subsong) {
-    song->subsong = subsong;
+    song->subsong = (subsong >= 0 && subsong < song->song.num_subsongs) ? subsong : 0;
 }
 
 
@@ -118,7 +121,7 @@ void pre_song_set_sample_rate(PreSong* song, u32 rate) {
 
 
 void pre_song_set_solo_channel(PreSong* song, i32 channel) {
-    song->solo_channel = channel;
+    song->solo_channel = (channel >= -1 && channel < NUM_CHANNELS) ? channel : -1;
 }
 
 
@@ -139,12 +142,12 @@ void pre_song_set_stereo_mix(PreSong* song, f32 mix) {
 
 
 void pre_song_set_stereo_width(PreSong* song, f32 delay_ms) {
-    song->stereo_width_ms = delay_ms;
+    song->stereo_width_ms = isfinite(delay_ms) && delay_ms > 0.0f ? delay_ms : 0.0f;
 }
 
 
 void pre_song_set_interp_mode(PreSong* song, PreInterpMode mode) {
-    song->interp_mode = (u8)mode;
+    song->interp_mode = mode == PRE_INTERP_SINC ? PRE_INTERP_SINC : PRE_INTERP_BLEP;
 }
 
 static void update_playback_state(PreSong* ps) {
@@ -197,9 +200,8 @@ void pre_song_start(PreSong* song) {
     song->mixer.stereo_mix = song->stereo_mix;
     song->mixer.interp_mode = song->interp_mode;
     if (song->stereo_width_ms > 0.0f) {
-        u32 delay = (u32)(song->stereo_width_ms * 0.001f * (f32)song->sample_rate + 0.5f);
-        if (delay > 63)
-            delay = 63;
+        f64 delay_samples = (f64)song->stereo_width_ms * 0.001 * (f64)song->sample_rate;
+        u32 delay = delay_samples >= 62.5 ? 63 : (u32)(delay_samples + 0.5);
         song->mixer.haas_delay_samples = delay;
         song->mixer.haas_blend = 0.3f;
     } else {

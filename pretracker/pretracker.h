@@ -58,18 +58,24 @@ typedef enum {
 } PreInterpMode;
 
 // Lifecycle
+// A null data pointer is rejected, regardless of size.
 struct PreSong* pre_song_create(const uint8_t* data, uint32_t size);
 void pre_song_destroy(struct PreSong* song);
 
 // Configuration (call before pre_song_start, or between restarts)
+// Values outside the module's subsong range select subsong zero.
 void pre_song_set_subsong(struct PreSong* song, int subsong);
 // Rates below PRE_MIN_SAMPLE_RATE are normalized to PRE_MIN_SAMPLE_RATE.
 void pre_song_set_sample_rate(struct PreSong* song, uint32_t rate);
+// Valid channels are -1 (all) and 0 through 3; other values select all channels.
 void pre_song_set_solo_channel(struct PreSong* song, int32_t channel);
 // 0.0 = full Amiga hard-panned stereo (default), 1.0 = mono.
 // Finite values are clamped to this range; non-finite values select the default.
 void pre_song_set_stereo_mix(struct PreSong* song, float mix);
+// Unsupported values select PRE_INTERP_BLEP.
 void pre_song_set_interp_mode(struct PreSong* song, PreInterpMode mode);
+// Non-finite and non-positive values disable widening. Large delays saturate
+// at the maximum supported 63 samples.
 void pre_song_set_stereo_width(struct PreSong* song, float delay_ms);
 
 // Playback

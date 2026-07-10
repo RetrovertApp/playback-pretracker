@@ -1,6 +1,8 @@
 #include "pretracker_internal.h"
 
 #include <assert.h>
+#include <float.h>
+#include <limits.h>
 #include <math.h>
 #include <string.h>
 
@@ -112,6 +114,84 @@ static void test_public_track_bounds(void) {
     assert(pre_song_get_track_cell(song, 1, 0, &cell));
     assert(!pre_song_get_track_cell(song, 2, 0, &cell));
     assert(!pre_song_get_track_cell(song, 1, 1, &cell));
+    pre_song_destroy(song);
+}
+
+static void test_public_configuration_normalization(void) {
+    const f32 invalid_widths[] = {-INFINITY, -1.0f, -0.0f, 0.0f, INFINITY, NAN};
+    const i32 invalid_channels[] = {INT32_MIN, -2, 4, INT32_MAX};
+    u8 data[OLD_SIZE];
+    make_old_song(data);
+
+    assert(pre_song_create(NULL, 0) == NULL);
+    assert(pre_song_create(NULL, UINT32_MAX) == NULL);
+
+    struct PreSong* song = pre_song_create(data, sizeof(data));
+    assert(song != NULL);
+
+    for (size_t i = 0; i < sizeof(invalid_widths) / sizeof(invalid_widths[0]); ++i) {
+        pre_song_set_stereo_width(song, invalid_widths[i]);
+        pre_song_start(song);
+        assert(song->stereo_width_ms == 0.0f);
+        assert(song->mixer.haas_delay_samples == 0);
+        assert(song->mixer.haas_blend == 0.0f);
+    }
+    pre_song_set_stereo_width(song, 1.0f);
+    pre_song_start(song);
+    assert(song->mixer.haas_delay_samples == 48);
+    pre_song_set_stereo_width(song, FLT_MAX);
+    pre_song_start(song);
+    assert(song->mixer.haas_delay_samples == 63);
+
+    for (size_t i = 0; i < sizeof(invalid_channels) / sizeof(invalid_channels[0]); ++i) {
+        pre_song_set_solo_channel(song, invalid_channels[i]);
+        pre_song_start(song);
+        assert(song->solo_channel == -1);
+        assert(song->mixer.solo_channel == -1);
+    }
+    for (i32 channel = -1; channel < NUM_CHANNELS; ++channel) {
+        pre_song_set_solo_channel(song, channel);
+        pre_song_start(song);
+        assert(song->mixer.solo_channel == channel);
+    }
+
+    pre_song_set_interp_mode(song, PRE_INTERP_SINC);
+    pre_song_start(song);
+    assert(song->mixer.interp_mode == PRE_INTERP_SINC);
+    pre_song_set_interp_mode(song, (PreInterpMode)-1);
+    pre_song_start(song);
+    assert(song->mixer.interp_mode == PRE_INTERP_BLEP);
+    pre_song_set_interp_mode(song, (PreInterpMode)2);
+    pre_song_start(song);
+    assert(song->mixer.interp_mode == PRE_INTERP_BLEP);
+
+    pre_song_destroy(song);
+}
+
+static void test_invalid_subsong_resets_selection(void) {
+    const int invalid_subsongs[] = {INT_MIN, -1, 2, INT_MAX};
+    u8 data[V15_SIZE];
+    make_v15_song(data);
+    data[0x62] = 1;
+    data[0x6A] = 2;
+    data[0x79] = 7;
+
+    struct PreSong* song = pre_song_create(data, sizeof(data));
+    assert(song != NULL);
+    for (size_t i = 0; i < sizeof(invalid_subsongs) / sizeof(invalid_subsongs[0]); ++i) {
+        pre_song_set_subsong(song, 1);
+        pre_song_start(song);
+        assert(song->last_parsed_subsong == 1);
+        assert(pre_song_get_metadata(song)->num_steps == 2);
+
+        pre_song_set_subsong(song, invalid_subsongs[i]);
+        assert(song->subsong == 0);
+        pre_song_start(song);
+        assert(song->last_parsed_subsong == 0);
+        assert(pre_song_get_metadata(song)->num_steps == 1);
+        assert(pre_song_get_playback_state(song)->position == 0);
+        assert(pre_song_get_playback_state(song)->row == 0);
+    }
     pre_song_destroy(song);
 }
 
@@ -670,6 +750,8 @@ int main(void) {
     test_old_layout_and_pattern_table();
     test_rejects_zero_wave_song();
     test_public_track_bounds();
+    test_public_configuration_normalization();
+    test_invalid_subsong_resets_selection();
     test_player_skips_missing_pattern_pointer();
     test_extreme_tonal_note_clamps_oscillator_index();
     test_fixed_point_period_interpolation();
