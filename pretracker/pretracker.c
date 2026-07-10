@@ -159,7 +159,7 @@ u32 pre_song_init(MySong* song, u8* prt_data, u32 prt_size, int subsong) {
     // Parse instrument infos
     u8 num_instruments = prt_data[0x40];
     u8 actual_instruments = num_instruments;
-    if (version == 0x1E && actual_instruments > MAX_INSTRUMENTS) {
+    if (actual_instruments > MAX_INSTRUMENTS) {
         actual_instruments = MAX_INSTRUMENTS;
     }
 
