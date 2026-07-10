@@ -710,7 +710,11 @@ static void gen_chord_tone(PlayerState* player, const WaveInfo* wi, i16 note, bo
         }
     } else {
         if (pitch_ramp_val <= 0) {
-            pitch_ramp_val <<= octave;
+            if (octave < 0) {
+                pitch_ramp_val = 0;
+            } else {
+                pitch_ramp_val <<= octave;
+            }
             pitch_ramp_val += pitch_ramp_val;
         } else {
             pitch_ramp_val = pitch_ramp_val * pitch_ramp_val;
