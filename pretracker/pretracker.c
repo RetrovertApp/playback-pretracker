@@ -55,7 +55,7 @@ PreSong* pre_song_create(const u8* data, u32 size) {
         return nullptr;
     }
 
-    // Own a copy of PRT data (WaveInfo pointers reference into it)
+    // Own a copy of PRT data for pattern, position, and instrument data.
     ps->prt_data = (u8*)malloc(size);
     if (!ps->prt_data) {
         free(ps);

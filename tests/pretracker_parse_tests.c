@@ -19,6 +19,16 @@ static void write_be32(u8* p, u32 value) {
     p[3] = (u8)value;
 }
 
+static void write_be16(u8* p, u16 value) {
+    p[0] = (u8)(value >> 8);
+    p[1] = (u8)value;
+}
+
+static u8* pointer_with_parity(u8* storage, bool odd) {
+    bool storage_is_odd = ((uintptr_t)storage & 1) != 0;
+    return storage + (storage_is_odd == odd ? 0 : 1);
+}
+
 static void make_old_song(u8* data) {
     memset(data, 0, OLD_SIZE);
     write_be32(data, 0x5052541B);
@@ -693,6 +703,90 @@ static void test_rejects_invalid_wave_cross_references(void) {
     assert(pre_song_create(two_wave_data, sizeof(two_wave_data)) == NULL);
 }
 
+static void test_decodes_wave_info_from_odd_address(void) {
+    u8 aligned_storage[ONE_WAVE_SIZE + 1];
+    u8 storage[ONE_WAVE_SIZE + 1];
+    u8* aligned = pointer_with_parity(aligned_storage, false);
+    u8* odd = pointer_with_parity(storage, true);
+    SongState aligned_song;
+    SongState odd_song;
+    assert(((uintptr_t)aligned & 1) == 0);
+    assert(((uintptr_t)odd & 1) == 1);
+    make_one_wave_song(aligned);
+
+    u8* wave = aligned + ONE_WAVE_INFO_OFFSET;
+    write_be16(wave + 0x00, 0x1234);
+    write_be16(wave + 0x02, 0x5678);
+    write_be16(wave + 0x04, 0x2345);
+    wave[0x06] = 1;
+    wave[0x07] = 2;
+    write_be16(wave + 0x08, 0x3456);
+    write_be16(wave + 0x0A, 0x4567);
+    write_be16(wave + 0x0C, 0x5678);
+    for (u8 offset = 0x0E; offset < WAVE_INFO_DISK_SIZE; ++offset)
+        wave[offset] = offset;
+    wave[0x1A] = 0;
+    memcpy(odd, aligned, ONE_WAVE_SIZE);
+
+    assert(pretracker_parse_song(&aligned_song, aligned, ONE_WAVE_SIZE, 0) != 0);
+    assert(pretracker_parse_song(&odd_song, odd, ONE_WAVE_SIZE, 0) != 0);
+
+    const WaveInfo* decoded = &odd_song.waveinfos[0];
+    assert(decoded->loop_start == 0x1234);
+    assert(decoded->loop_end == 0x5678);
+    assert(decoded->subloop_len == 0x2345);
+    assert(decoded->allow_9xx == 1);
+    assert(decoded->subloop_wait == 2);
+    assert(decoded->subloop_step == 0x3456);
+    assert(decoded->chipram == 0x4567);
+    assert(decoded->loop_offset == 0x5678);
+    assert(decoded->chord_note1 == 0x0E);
+    assert(decoded->mod_density == 0x29);
+    assert(memcmp(&aligned_song.waveinfos[0], decoded, sizeof(*decoded)) == 0);
+    assert(decoded == odd_song.waveinfo_ptr);
+    assert(decoded == odd_song.waveinfo_table[0]);
+    assert((const u8*)decoded < odd || (const u8*)decoded >= odd + ONE_WAVE_SIZE);
+}
+
+static void test_rejects_incomplete_wave_info_records(void) {
+    u8 one_wave[ONE_WAVE_SIZE];
+    u8 two_waves[TWO_WAVE_SIZE];
+    SongState song;
+    make_one_wave_song(one_wave);
+    assert(pretracker_parse_song(&song, one_wave, ONE_WAVE_INFO_OFFSET + 41, 0) == 0);
+
+    make_two_wave_song(two_waves);
+    assert(pretracker_parse_song(&song, two_waves,
+                                 ONE_WAVE_INFO_OFFSET + WAVE_INFO_DISK_SIZE + 41, 0) == 0);
+}
+
+static void test_odd_address_playback_matches_aligned_input(void) {
+    u8 aligned_storage[ONE_WAVE_SIZE + 1];
+    u8 storage[ONE_WAVE_SIZE + 1];
+    u8* aligned = pointer_with_parity(aligned_storage, false);
+    u8* odd = pointer_with_parity(storage, true);
+    f32 aligned_output[128];
+    f32 odd_output[128];
+    assert(((uintptr_t)aligned & 1) == 0);
+    assert(((uintptr_t)odd & 1) == 1);
+    make_one_wave_song(aligned);
+    aligned[ONE_WAVE_INFO_OFFSET + 0x18] = 128;
+    aligned[ONE_WAVE_INFO_OFFSET + 0x1E] = 0xFF;
+    memcpy(odd, aligned, ONE_WAVE_SIZE);
+
+    struct PreSong* aligned_song = pre_song_create(aligned, ONE_WAVE_SIZE);
+    struct PreSong* odd_song = pre_song_create(odd, ONE_WAVE_SIZE);
+    assert(aligned_song != NULL);
+    assert(odd_song != NULL);
+    pre_song_start(aligned_song);
+    pre_song_start(odd_song);
+    assert(pre_song_decode(aligned_song, aligned_output, 64) == 64);
+    assert(pre_song_decode(odd_song, odd_output, 64) == 64);
+    assert(memcmp(aligned_output, odd_output, sizeof(aligned_output)) == 0);
+    pre_song_destroy(aligned_song);
+    pre_song_destroy(odd_song);
+}
+
 static void test_v15_validates_every_subsong(void) {
     u8 data[V15_SIZE];
     SongState song;
@@ -772,6 +866,9 @@ int main(void) {
     test_rejects_invalid_position_pattern();
     test_rejects_invalid_instrument_lookup_index();
     test_rejects_invalid_wave_cross_references();
+    test_decodes_wave_info_from_odd_address();
+    test_rejects_incomplete_wave_info_records();
+    test_odd_address_playback_matches_aligned_input();
     test_v15_validates_every_subsong();
     test_subsong_apply_is_bounded();
     test_subsong_rebuild_clears_stale_patterns();

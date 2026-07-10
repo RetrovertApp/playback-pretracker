@@ -46,6 +46,7 @@ typedef struct PreSong PreSong;
 #define MAX_WAVES 24
 #define MAX_INSTRUMENTS 32
 #define MAX_TRACK_DELAY 32
+#define WAVE_INFO_DISK_SIZE 42
 #define NOTE_OFF_PITCH 0x3D
 #define NOTES_IN_OCTAVE 12
 #define NUM_CHANNELS 4
@@ -71,8 +72,7 @@ extern const f32 s_sinc_table[SINC_PHASES][SINC_TAPS];
 // Sample generation period: AMIGA_MAX_PERIOD = native resolution, 222 = HQ resolution
 #define HQ_MAX_PERIOD AMIGA_MAX_PERIOD
 
-// WaveInfo (42 bytes, matches wi_* at raspberry_casket.asm:364-402)
-// Packed to match assembly layout exactly.
+// Native decoded wave state (wi_* at raspberry_casket.asm:364-402).
 typedef struct {
     u16 loop_start;       // $00 wi_loop_start_w
     u16 loop_end;         // $02 wi_loop_end_w
@@ -110,7 +110,7 @@ typedef struct {
     u8 mod_length;        // $27 wi_mod_length_b
     u8 mod_predelay;      // $28 wi_mod_predelay_b
     u8 mod_density;       // $29 wi_mod_density_b (bits 0-2: density, bits 3-4: unisono, bit 5: post)
-} WaveInfo;                // $2A = 42 bytes
+} WaveInfo;
 
 // WaveInfo flag bits
 #define WI_FLAG_OSC_TYPE_MASK 0x03  // bits 0-1: 00=saw, 01=tri, 10=sqr, 11=noise
@@ -237,6 +237,7 @@ typedef struct {
 
 // SongState (matches sv_* at raspberry_casket.asm:421-438)
 struct SongState {
+    WaveInfo waveinfos[MAX_WAVES];                      // decoded, song-owned wave state
     WaveInfo* waveinfo_table[MAX_WAVES];                // sv_waveinfo_table
     u8* inst_patterns_table[MAX_INSTRUMENTS];            // sv_inst_patterns_table
     u32 wavelength_table[MAX_WAVES];                     // sv_wavelength_table

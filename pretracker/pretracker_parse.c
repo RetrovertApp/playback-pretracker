@@ -38,6 +38,45 @@ static bool wave_order_is_permutation(const SongState* song) {
     return true;
 }
 
+static void decode_wave_info(WaveInfo* output, const u8* input) {
+    output->loop_start = read_be16(input + 0x00);
+    output->loop_end = read_be16(input + 0x02);
+    output->subloop_len = read_be16(input + 0x04);
+    output->allow_9xx = input[0x06];
+    output->subloop_wait = input[0x07];
+    output->subloop_step = read_be16(input + 0x08);
+    output->chipram = read_be16(input + 0x0A);
+    output->loop_offset = read_be16(input + 0x0C);
+    output->chord_note1 = input[0x0E];
+    output->chord_note2 = input[0x0F];
+    output->chord_note3 = input[0x10];
+    output->chord_shift = input[0x11];
+    output->osc_unknown = input[0x12];
+    output->osc_phase_spd = input[0x13];
+    output->flags = input[0x14];
+    output->osc_phase_min = input[0x15];
+    output->osc_phase_max = input[0x16];
+    output->osc_basenote = input[0x17];
+    output->osc_gain = input[0x18];
+    output->sam_len = input[0x19];
+    output->mix_wave = input[0x1A];
+    output->vol_attack = input[0x1B];
+    output->vol_delay = input[0x1C];
+    output->vol_decay = input[0x1D];
+    output->vol_sustain = input[0x1E];
+    output->flt_type = input[0x1F];
+    output->flt_resonance = input[0x20];
+    output->pitch_ramp = input[0x21];
+    output->flt_start = input[0x22];
+    output->flt_min = input[0x23];
+    output->flt_max = input[0x24];
+    output->flt_speed = input[0x25];
+    output->mod_wetness = input[0x26];
+    output->mod_length = input[0x27];
+    output->mod_predelay = input[0x28];
+    output->mod_density = input[0x29];
+}
+
 static bool validate_layout(const SongLayout* layout, const u8* prt_data, u32 prt_size,
                             u32 position_end, u32 pattern_end) {
     u32 position_bytes = (u32)layout->num_positions * NUM_CHANNELS * 2;
@@ -273,15 +312,16 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
     }
     ptr = (u8*)name_ptr;
 
-    // Align to even address
-    if ((uintptr_t)ptr & 1) {
+    // Wave records begin at the next even file offset, independent of where
+    // the module buffer happens to be allocated in host memory.
+    if ((size_t)(ptr - prt_data) & 1) {
         if (ptr == end)
             return 0;
         ptr++;
     }
-    if ((size_t)(end - ptr) < (size_t)song->num_waves * sizeof(WaveInfo))
+    if ((size_t)(end - ptr) < (size_t)song->num_waves * WAVE_INFO_DISK_SIZE)
         return 0;
-    song->waveinfo_ptr = (WaveInfo*)ptr;
+    song->waveinfo_ptr = song->waveinfos;
 
     // Wave generation ordering
     if (version > 0x19) {
@@ -296,8 +336,9 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
 
     // Calculate sample sizes
     u32 total_chip_mem = 2;
-    WaveInfo* wi = song->waveinfo_ptr;
     for (int i = 0; i < song->num_waves; i++) {
+        WaveInfo* wi = &song->waveinfos[i];
+        decode_wave_info(wi, ptr + (size_t)i * WAVE_INFO_DISK_SIZE);
         if (wi->mix_wave > song->num_waves)
             return 0;
         song->waveinfo_table[i] = wi;
@@ -310,7 +351,6 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
         }
         song->wavetotal_table[i] = total_len;
         total_chip_mem += total_len;
-        wi++;
     }
 
     return total_chip_mem;
