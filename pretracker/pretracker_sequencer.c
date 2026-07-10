@@ -927,6 +927,9 @@ static bool advance_pending_pattern_state(PerChannelData* pcd, SongState* song) 
 
 static bool read_pattern_row(const PerChannelData* pcd, const SongState* song,
                              const PlayerState* player, PatternRow* row, i16* pitch_shift) {
+    if (song->curr_pat_pos >= song->pat_pos_len)
+        return false;
+
     u16 pos_offset = song->curr_pat_pos * 4 + pcd->channel_num;
     pos_offset *= 2;
     const u8* pos_ptr = song->pos_data_adr + pos_offset;
@@ -936,7 +939,8 @@ static bool read_pattern_row(const PerChannelData* pcd, const SongState* song,
         return false;
 
     u8 pattern_num = pos_ptr[0];
-    if (pattern_num == 0)
+    if (pattern_num == 0 || pattern_num > song->num_patterns ||
+        song->pattern_table[pattern_num - 1] == NULL)
         return false;
 
     const u8* pattern_data = song->pattern_table[pattern_num - 1] + (u32)curr_row * 3;

@@ -153,31 +153,6 @@ void pre_song_set_interp_mode(PreSong* song, PreInterpMode mode) {
     song->interp_mode = (u8)mode;
 }
 
-// Internal helpers for subsong switching
-
-static void apply_subsong(SongState* song, u8* prt_data, int subsong) {
-    u32 posd_offset = read_be32(prt_data + 0x04);
-    u32 patt_offset = read_be32(prt_data + 0x08);
-
-    int sel = (subsong >= 0 && subsong < song->num_subsongs) ? subsong : 0;
-
-    u8* subsong_hdr = prt_data + posd_offset + (u32)sel * 8;
-    song->pat_restart_pos = subsong_hdr[0];
-    song->pat_pos_len = subsong_hdr[3];
-    song->num_steps = subsong_hdr[2];
-
-    u32 pos_data_base = posd_offset + (u32)song->num_subsongs * 8;
-    u32 pos_entries_before = 0;
-    for (int i = 0; i < sel; i++) {
-        u8* hdr = prt_data + posd_offset + (u32)i * 8;
-        pos_entries_before += hdr[3];
-    }
-    song->pos_data_adr = prt_data + pos_data_base + pos_entries_before * 8;
-
-    u32 pat_rel = read_be32(subsong_hdr + 4);
-    song->patterns_ptr = prt_data + patt_offset + pat_rel;
-}
-
 static void update_playback_state(PreSong* ps) {
     PrePlaybackState* state = &ps->playback_state;
     SongState* song = &ps->song;
@@ -191,12 +166,16 @@ static void update_playback_state(PreSong* ps) {
     for (int ch = 0; ch < NUM_CHANNELS; ch++) {
         PerChannelData* pcd = &player->channeldata[ch];
 
-        // Look up position table entry for this channel
-        u16 pos_offset = song->curr_pat_pos * 4 + (u16)ch;
-        pos_offset *= 2;
-        u8* pos_ptr = song->pos_data_adr + pos_offset;
-        state->channels[ch].track_num = pos_ptr[0];
-        state->channels[ch].pitch_shift = (i8)pos_ptr[1];
+        if (song->curr_pat_pos < song->pat_pos_len) {
+            u16 pos_offset = song->curr_pat_pos * 4 + (u16)ch;
+            pos_offset *= 2;
+            u8* pos_ptr = song->pos_data_adr + pos_offset;
+            state->channels[ch].track_num = pos_ptr[0];
+            state->channels[ch].pitch_shift = (i8)pos_ptr[1];
+        } else {
+            state->channels[ch].track_num = 0;
+            state->channels[ch].pitch_shift = 0;
+        }
 
         state->channels[ch].instrument = (u8)(pcd->inst_num4 >> 2);
         state->channels[ch].volume = pcd->pat_vol;
@@ -210,11 +189,13 @@ static void update_playback_state(PreSong* ps) {
 void pre_song_start(PreSong* song) {
     // Re-apply subsong if changed (only relevant for V1.5 multi-subsong files)
     if (song->subsong != song->last_parsed_subsong && song->song.num_subsongs > 1) {
-        apply_subsong(&song->song, song->prt_data, song->subsong);
-        song->metadata.num_positions = song->song.pat_pos_len;
-        song->metadata.num_steps = song->song.num_steps;
-        pretracker_rebuild_pattern_table(&song->song);
-        song->last_parsed_subsong = song->subsong;
+        if (pretracker_apply_subsong(&song->song, song->prt_data, song->prt_data_size,
+                                     song->subsong)) {
+            song->metadata.num_positions = song->song.pat_pos_len;
+            song->metadata.num_steps = song->song.num_steps;
+            pretracker_rebuild_pattern_table(&song->song);
+            song->last_parsed_subsong = song->subsong;
+        }
     }
 
     pretracker_mixer_init(&song->mixer, song->sample_rate);
@@ -276,7 +257,8 @@ bool pre_song_get_position_entry(const PreSong* ps, u16 position, u8 channel, u8
 
 bool pre_song_get_track_cell(const PreSong* ps, u8 track, u8 row, PreTrackCell* cell) {
     const SongState* song = &ps->song;
-    if (track == 0 || row >= song->num_steps) {
+    if (track == 0 || track > song->num_patterns || row >= song->num_steps ||
+        song->pattern_table[track - 1] == NULL) {
         return false;
     }
     const u8* pat_data = song->pattern_table[track - 1] + (u32)row * 3;

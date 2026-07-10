@@ -242,6 +242,7 @@ struct SongState {
     u8 wavegen_order_table[MAX_WAVES];                   // sv_wavegen_order_table
     u8 num_waves;                                        // sv_num_waves_b
     u8 num_steps;                                        // sv_num_steps_b
+    u8 num_patterns;                                     // valid entries in sv_pattern_table
     u8 num_subsongs;                                     // V1.5: subsong count from offset 0x5A
     u8* patterns_ptr;                                    // sv_patterns_ptr
     u16 curr_pat_pos;                                    // sv_curr_pat_pos_w
@@ -403,6 +404,7 @@ struct MixerState {
 // Internal subsystem interfaces (not part of the public API)
 bool pretracker_read_name_record(const u8** cursor, const u8* end, char* output, size_t output_size);
 u32  pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subsong);
+bool pretracker_apply_subsong(SongState* song, u8* prt_data, u32 prt_size, int subsong);
 void pretracker_rebuild_pattern_table(SongState* song);
 void pretracker_player_init(PlayerState* player, f32* sample_buffer, SongState* song);
 void pretracker_wavegen_generate(PlayerState* player);

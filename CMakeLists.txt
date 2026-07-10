@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 
 project(pretracker LANGUAGES C)
 
+include(CTest)
+
 add_library(pretracker STATIC
     pretracker/pretracker.c
     pretracker/pretracker_mixer.c
@@ -19,4 +21,11 @@ set_target_properties(pretracker PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(NOT MSVC)
     target_link_libraries(pretracker PUBLIC m)
+endif()
+
+if(BUILD_TESTING)
+    add_executable(pretracker_parse_tests tests/pretracker_parse_tests.c)
+    target_link_libraries(pretracker_parse_tests PRIVATE pretracker)
+    target_include_directories(pretracker_parse_tests PRIVATE pretracker)
+    add_test(NAME pretracker_parse_tests COMMAND pretracker_parse_tests)
 endif()

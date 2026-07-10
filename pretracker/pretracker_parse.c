@@ -2,6 +2,93 @@
 
 #include <string.h>
 
+typedef struct {
+    u8 restart_pos;
+    u8 num_patterns;
+    u8 num_steps;
+    u8 num_positions;
+    u32 position_offset;
+    u32 pattern_offset;
+} SongLayout;
+
+static bool range_fits(u32 offset, u32 length, u32 size) {
+    return offset <= size && length <= size - offset;
+}
+
+static bool validate_layout(const SongLayout* layout, const u8* prt_data, u32 prt_size,
+                            u32 position_end, u32 pattern_end) {
+    u32 position_bytes = (u32)layout->num_positions * NUM_CHANNELS * 2;
+    u32 pattern_bytes = (u32)layout->num_patterns * layout->num_steps * 3;
+    if (position_end > prt_size || pattern_end > prt_size ||
+        !range_fits(layout->position_offset, position_bytes, position_end) ||
+        !range_fits(layout->pattern_offset, pattern_bytes, pattern_end))
+        return false;
+
+    const u8* positions = prt_data + layout->position_offset;
+    for (u32 position = 0; position < layout->num_positions; ++position) {
+        for (u32 channel = 0; channel < NUM_CHANNELS; ++channel) {
+            u8 pattern_num = positions[(position * NUM_CHANNELS + channel) * 2];
+            if (pattern_num > layout->num_patterns)
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool get_v15_layout(const u8* prt_data, u32 prt_size, u8 num_subsongs,
+                           int subsong, SongLayout* layout) {
+    u32 posd_offset = read_be32(prt_data + 0x04);
+    u32 patt_offset = read_be32(prt_data + 0x08);
+    u32 inst_offset = read_be32(prt_data + 0x0C);
+    u32 headers_size = (u32)num_subsongs * 8;
+    if (posd_offset >= patt_offset || patt_offset >= prt_size || inst_offset > prt_size ||
+        patt_offset > inst_offset || !range_fits(posd_offset, headers_size, patt_offset))
+        return false;
+
+    int selected = (subsong >= 0 && subsong < num_subsongs) ? subsong : 0;
+    u32 positions_before = 0;
+    for (int i = 0; i <= selected; ++i) {
+        const u8* header = prt_data + posd_offset + (u32)i * 8;
+        if (i == selected) {
+            u32 pattern_relative = read_be32(header + 4);
+            if (pattern_relative > inst_offset - patt_offset)
+                return false;
+
+            u32 pattern_end = inst_offset;
+            if (i + 1 < num_subsongs) {
+                const u8* next_header = header + 8;
+                u32 next_relative = read_be32(next_header + 4);
+                if (next_relative < pattern_relative || next_relative > inst_offset - patt_offset)
+                    return false;
+                pattern_end = patt_offset + next_relative;
+            }
+
+            layout->restart_pos = header[0];
+            layout->num_patterns = header[1];
+            layout->num_steps = header[2];
+            layout->num_positions = header[3];
+            u32 position_base = posd_offset + headers_size;
+            u32 preceding_bytes = positions_before * NUM_CHANNELS * 2;
+            if (!range_fits(position_base, preceding_bytes, patt_offset))
+                return false;
+            layout->position_offset = position_base + preceding_bytes;
+            layout->pattern_offset = patt_offset + pattern_relative;
+            return validate_layout(layout, prt_data, prt_size, patt_offset, pattern_end);
+        }
+        positions_before += header[3];
+    }
+    return false;
+}
+
+static void apply_layout(SongState* song, u8* prt_data, const SongLayout* layout) {
+    song->pat_restart_pos = layout->restart_pos;
+    song->pat_pos_len = layout->num_positions;
+    song->num_patterns = layout->num_patterns;
+    song->num_steps = layout->num_steps;
+    song->pos_data_adr = prt_data + layout->position_offset;
+    song->patterns_ptr = prt_data + layout->pattern_offset;
+}
+
 bool pretracker_read_name_record(const u8** cursor, const u8* end, char* output, size_t output_size) {
     const u8* start = *cursor;
     const u8* p = start;
@@ -39,6 +126,7 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
     u8 max_inst_names = MAX_INSTRUMENTS;
     u32 posd_offset = read_be32(prt_data + 0x04);
     u32 patt_offset = read_be32(prt_data + 0x08);
+    u32 inst_offset = read_be32(prt_data + 0x0C);
 
     if (version == 0x1E) {
         if (prt_size < 0x5B)
@@ -47,42 +135,33 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
         u8 num_subsongs = prt_data[0x5A];
         song->num_subsongs = num_subsongs > 0 ? num_subsongs : 1;
 
-        int sel = (subsong >= 0 && subsong < song->num_subsongs) ? subsong : 0;
-        if (posd_offset > prt_size || (u32)song->num_subsongs * 8 > prt_size - posd_offset)
-            return 0;
-
-        // Subsong headers are contiguous at the start of POSD, 8 bytes each:
-        //   byte 0: restart, byte 1: num_patterns, byte 2: num_steps, byte 3: song_length
-        //   bytes 4-7: BE32 pattern data offset relative to PATT section
-        u8* subsong_hdr = prt_data + posd_offset + (u32)sel * 8;
-
-        song->pat_restart_pos = subsong_hdr[0];
-        song->pat_pos_len = subsong_hdr[3];
-        song->num_steps = subsong_hdr[2];
-
-        // Position data starts after all subsong headers, each subsong's entries are contiguous
-        u32 pos_data_base = posd_offset + (u32)song->num_subsongs * 8;
-        u32 pos_entries_before = 0;
-        for (int i = 0; i < sel; i++) {
-            u8* hdr = prt_data + posd_offset + (u32)i * 8;
-            pos_entries_before += hdr[3]; // song_length field
+        SongLayout layout;
+        for (int i = 0; i < song->num_subsongs; ++i) {
+            if (!get_v15_layout(prt_data, prt_size, song->num_subsongs, i, &layout))
+                return 0;
         }
-        song->pos_data_adr = prt_data + pos_data_base + pos_entries_before * 8;
-
-        // Adjust PATT base by subsong's relative pattern offset
-        u32 pat_rel = read_be32(subsong_hdr + 4);
-        song->patterns_ptr = prt_data + patt_offset + pat_rel;
+        if (!get_v15_layout(prt_data, prt_size, song->num_subsongs, subsong, &layout))
+            return 0;
+        apply_layout(song, prt_data, &layout);
 
         max_inst_names = 2 * MAX_INSTRUMENTS;
     } else if (version > 0x1B) {
         return 0;
     } else {
         song->num_subsongs = 1;
-        song->pat_restart_pos = prt_data[0x3C];
-        song->pat_pos_len = prt_data[0x3E];
-        song->num_steps = prt_data[0x3F];
-        song->pos_data_adr = prt_data + posd_offset;
-        song->patterns_ptr = prt_data + patt_offset;
+        SongLayout layout = {
+            .restart_pos = prt_data[0x3C],
+            .num_patterns = prt_data[0x3D],
+            .num_steps = prt_data[0x3F],
+            .num_positions = prt_data[0x3E],
+            .position_offset = posd_offset,
+            .pattern_offset = patt_offset,
+        };
+        if (posd_offset >= prt_size || patt_offset >= prt_size ||
+            inst_offset > prt_size || patt_offset > inst_offset ||
+            !validate_layout(&layout, prt_data, prt_size, patt_offset, inst_offset))
+            return 0;
+        apply_layout(song, prt_data, &layout);
     }
 
     song->num_waves = prt_data[0x41];
@@ -90,7 +169,6 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
         return 0;
 
     // Skip instrument names
-    u32 inst_offset = read_be32(prt_data + 0x0C);
     if (inst_offset >= prt_size)
         return 0;
     const u8* end = prt_data + prt_size;
@@ -117,6 +195,10 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
     for (int i = 0; i < actual_instruments; i++) {
         u8* ii = inst_info_base + i * 8;
         UnpackedInstrumentInfo* uii = &song->inst_infos[i];
+
+        if (ii[0] >= 16 || ii[1] >= 16 || ii[2] >= 16 || ii[3] >= 16 ||
+            ii[4] >= 16 || ii[6] >= 16)
+            return 0;
 
         u8 vd = ii[0]; // vibrato_delay
         uii->vibrato_delay = (i16)(s_vib_delay_table[vd] + 1);
@@ -206,10 +288,26 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
     return total_chip_mem;
 }
 
+bool pretracker_apply_subsong(SongState* song, u8* prt_data, u32 prt_size, int subsong) {
+    if (prt_size < 0x5B || prt_data[3] != 0x1E)
+        return false;
+
+    u8 num_subsongs = prt_data[0x5A];
+    if (num_subsongs == 0)
+        num_subsongs = 1;
+
+    SongLayout layout;
+    if (!get_v15_layout(prt_data, prt_size, num_subsongs, subsong, &layout))
+        return false;
+    apply_layout(song, prt_data, &layout);
+    return true;
+}
+
 void pretracker_rebuild_pattern_table(SongState* song) {
     u32 step_size = (u32)song->num_steps * 3;
     u8* pattern = song->patterns_ptr;
-    for (int index = 0; index < 255; index++) {
+    memset(song->pattern_table, 0, sizeof(song->pattern_table));
+    for (int index = 0; index < song->num_patterns; index++) {
         song->pattern_table[index] = pattern;
         pattern += step_size;
     }
