@@ -69,6 +69,8 @@ static inline u16 scale_offset(u16 amiga_val) {
 }
 
 void pretracker_init_channel(PerChannelData* pcd, const SongState* song, u8 channel_num) {
+    memset(pcd->arp_notes, 0, sizeof(pcd->arp_notes));
+    memset(pcd->track_delay_buffer, 0, sizeof(pcd->track_delay_buffer));
     pcd->pat_vol = MAX_VOLUME;
     pcd->track_delay_offset = 0xFF;
     pcd->waveinfo_ptr = song->num_waves > 0 ? &song->waveinfo_ptr[0] : NULL;
