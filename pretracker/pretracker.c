@@ -130,7 +130,7 @@ void pre_song_set_subsong(PreSong* song, int subsong) {
 
 
 void pre_song_set_sample_rate(PreSong* song, u32 rate) {
-    song->sample_rate = rate;
+    song->sample_rate = rate < PRE_MIN_SAMPLE_RATE ? PRE_MIN_SAMPLE_RATE : rate;
 }
 
 

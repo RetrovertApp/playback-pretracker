@@ -286,6 +286,40 @@ static void test_empty_layouts_remain_bounded(void) {
     pre_song_destroy(public_song);
 }
 
+static void test_minimum_sample_rate_preserves_decode_progress(void) {
+    const u32 rates[] = {0, 1, 49, 50};
+    u8 data[OLD_SIZE];
+    f32 output[17 * 2];
+    make_old_song(data);
+
+    for (size_t i = 0; i < sizeof(rates) / sizeof(rates[0]); ++i) {
+        struct PreSong* song = pre_song_create(data, sizeof(data));
+        assert(song != NULL);
+        pre_song_set_sample_rate(song, rates[i]);
+        pre_song_start(song);
+        assert(pre_song_decode(song, output, 17) == 17);
+        pre_song_destroy(song);
+    }
+}
+
+static void test_mixer_sample_rate_timing(void) {
+    MixerState mixer;
+    const u32 low_rates[] = {0, 1, 49, 50};
+
+    for (size_t i = 0; i < sizeof(low_rates) / sizeof(low_rates[0]); ++i) {
+        pretracker_mixer_init(&mixer, low_rates[i]);
+        assert(mixer.output_rate == PRE_MIN_SAMPLE_RATE);
+        assert(mixer.samples_per_tick == 1);
+    }
+
+    pretracker_mixer_init(&mixer, 44100);
+    assert(mixer.output_rate == 44100);
+    assert(mixer.samples_per_tick == 882);
+    pretracker_mixer_init(&mixer, 48000);
+    assert(mixer.output_rate == 48000);
+    assert(mixer.samples_per_tick == 960);
+}
+
 static void test_rejects_invalid_position_pattern(void) {
     u8 data[OLD_SIZE];
     SongState song;
@@ -422,6 +456,8 @@ int main(void) {
     test_sample_clamp_matches_signed_byte_rails();
     test_rejects_truncated_old_layouts();
     test_empty_layouts_remain_bounded();
+    test_minimum_sample_rate_preserves_decode_progress();
+    test_mixer_sample_rate_timing();
     test_rejects_invalid_position_pattern();
     test_rejects_invalid_instrument_lookup_index();
     test_rejects_invalid_wave_cross_references();

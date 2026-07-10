@@ -11,6 +11,7 @@
 #define PRE_MAX_WAVES 24
 #define PRE_MAX_INSTRUMENTS 32
 #define PRE_NAME_MAX_LEN 24 // 23 chars + null terminator
+#define PRE_MIN_SAMPLE_RATE 50
 
 typedef struct PreSongMetadata {
     char song_name[21];
@@ -62,6 +63,7 @@ void pre_song_destroy(struct PreSong* song);
 
 // Configuration (call before pre_song_start, or between restarts)
 void pre_song_set_subsong(struct PreSong* song, int subsong);
+// Rates below PRE_MIN_SAMPLE_RATE are normalized to PRE_MIN_SAMPLE_RATE.
 void pre_song_set_sample_rate(struct PreSong* song, uint32_t rate);
 void pre_song_set_solo_channel(struct PreSong* song, int32_t channel);
 void pre_song_set_stereo_mix(struct PreSong* song, float mix);

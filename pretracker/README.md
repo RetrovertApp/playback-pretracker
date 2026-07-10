@@ -81,6 +81,9 @@ void pre_song_set_stereo_width(struct PreSong* song, float delay_ms);
 void pre_song_set_interp_mode(struct PreSong* song, PreInterpMode mode);
 ```
 
+The minimum sample rate is 50 Hz. Lower values passed to
+`pre_song_set_sample_rate` are normalized to 50 Hz.
+
 `PreInterpMode` is either `PRE_INTERP_BLEP` (default — nearest-neighbor + BLEP, matches `PreTracker.exe`) or `PRE_INTERP_SINC` (windowed sinc, cleaner for HQ buffers).
 
 ### Playback

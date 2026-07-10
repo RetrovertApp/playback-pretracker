@@ -66,8 +66,8 @@ static inline f32 sinc_interpolate(const f32* data, u32 data_len, f64 frac_pos) 
 
 void pretracker_mixer_init(MixerState* mixer, u32 output_rate) {
     memset(mixer, 0, sizeof(MixerState));
-    mixer->output_rate = output_rate;
-    mixer->samples_per_tick = output_rate / 50;
+    mixer->output_rate = output_rate < PRE_MIN_SAMPLE_RATE ? PRE_MIN_SAMPLE_RATE : output_rate;
+    mixer->samples_per_tick = mixer->output_rate / 50;
     mixer->samples_until_tick = 0;
     mixer->solo_channel = -1;
     mixer->stereo_mix = 0.0f;
