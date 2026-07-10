@@ -259,6 +259,11 @@ u32 pre_song_init(MySong* song, u8* prt_data, u32 prt_size, int subsong) {
 // Matches raspberry_casket.asm:1040-1098
 
 static void gen_osc_buffers(MyPlayer* player) {
+    // Normalize the signed-byte waveform domain to the full symmetric float range.
+    // The reference 8-bit output is exactly (normalized * 255/256) - 1/256;
+    // retaining this form avoids carrying its attenuation and DC bias into sample generation.
+    const f32 bipolar_u8_scale = 2.0f * (1.0f / 255.0f);
+
     for (int note = 0; note < NOTES_IN_OCTAVE; note++) {
         OscNoteBuffers* nb = &player->osc_buffers[note];
         u16 period = s_log12_table[note];
@@ -278,7 +283,7 @@ static void gen_osc_buffers(MyPlayer* player) {
             u8 frac = (u8)(acc >> 8);
 
             // Sawtooth: map 0..255 -> +1.0..-1.0
-            nb->saw_waves[pos] = 1.0f - 2.0f * (f32)frac / 255.0f;
+            nb->saw_waves[pos] = 1.0f - (f32)frac * bipolar_u8_scale;
 
             // Doubled frac for triangle/square
             u8 doubled = (u8)(frac << 1); // add.b d2,d2 wraps at 8 bits
@@ -292,11 +297,11 @@ static void gen_osc_buffers(MyPlayer* player) {
             // When acc > 0x7FFF it becomes negative, so pos (always positive) is greater
             if ((i16)pos > (i16)acc) {
                 // First half: triangle ramp up, square low
-                nb->tri_waves[tri_pos] = 1.0f - 2.0f * (f32)doubled / 255.0f;
+                nb->tri_waves[tri_pos] = 1.0f - (f32)doubled * bipolar_u8_scale;
                 nb->sqr_waves[pos] = -1.0f;
             } else {
                 // Second half: triangle ramp down, square high (or low at midpoint)
-                nb->tri_waves[tri_pos] = -1.0f + 2.0f * (f32)doubled / 255.0f;
+                nb->tri_waves[tri_pos] = -1.0f + (f32)doubled * bipolar_u8_scale;
                 nb->sqr_waves[pos] = (pos == half_period) ? -1.0f : 1.0f;
             }
 
@@ -336,7 +341,11 @@ static void gen_noise(MyPlayer* player, const WaveInfo* wi, i16 octave, i16 base
     }
 
     u16 noise_seed = (u16)(wi->osc_phase_min + wi->chord_shift + 1);
-    f32 noise_gain_f = (f32)wi->osc_gain / 128.0f;
+    // Keep noise gain continuous instead of reproducing the reference player's
+    // per-sample asr #7 floor. That quantization adds a negative half-LSB bias
+    // and collapses quiet noise to a small number of amplitude levels.
+    const f32 signed_byte_scale = 1.0f / 128.0f;
+    const f32 noise_gain_f = (f32)wi->osc_gain * signed_byte_scale;
 
     f32* out = player->wg_curr_sample_ptr;
     i32 noise_speed = base_speed; // a1 — current speed, updated by ramp
@@ -360,7 +369,7 @@ static void gen_noise(MyPlayer* player, const WaveInfo* wi, i16 octave, i16 base
         }
 
         // Apply gain to noise sample
-        f32 noise_sample = (f32)(i8)(ns & 0xFF) / 128.0f;
+        f32 noise_sample = (f32)(i8)(ns & 0xFF) * signed_byte_scale;
         f32 gained = noise_gain_f * noise_sample;
         f32 out_val = clamp_sample(*out + gained);
 
