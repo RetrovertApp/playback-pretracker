@@ -15,6 +15,29 @@ static bool range_fits(u32 offset, u32 length, u32 size) {
     return offset <= size && length <= size - offset;
 }
 
+static bool instrument_steps_reference_declared_waves(const u8* steps, u8 num_steps,
+                                                      u8 num_waves) {
+    for (u8 step = 0; step < num_steps; ++step) {
+        u8 command = steps[(u32)step * 3 + 1] & 0x0F;
+        u8 command_data = steps[(u32)step * 3 + 2];
+        if ((command == INST_CMD_SELECT_WAVE || command == INST_CMD_SELECT_WAVE_NOSYNC) &&
+            command_data != 0 && command_data > num_waves)
+            return false;
+    }
+    return true;
+}
+
+static bool wave_order_is_permutation(const SongState* song) {
+    bool seen[MAX_WAVES] = {false};
+    for (u8 order = 0; order < song->num_waves; ++order) {
+        u8 wave = song->wavegen_order_table[order];
+        if (wave >= song->num_waves || seen[wave])
+            return false;
+        seen[wave] = true;
+    }
+    return true;
+}
+
 static bool validate_layout(const SongLayout* layout, const u8* prt_data, u32 prt_size,
                             u32 position_end, u32 pattern_end) {
     u32 position_bytes = (u32)layout->num_positions * NUM_CHANNELS * 2;
@@ -232,6 +255,8 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
         // Store instrument pattern pointer, advance past pattern data
         if ((size_t)(end - inst_pattern_ptr) < (size_t)steps * 3)
             return 0;
+        if (!instrument_steps_reference_declared_waves(inst_pattern_ptr, steps, song->num_waves))
+            return 0;
         song->inst_patterns_table[i] = inst_pattern_ptr;
         inst_pattern_ptr += (u32)steps * 3;
     }
@@ -265,12 +290,16 @@ u32 pretracker_parse_song(SongState* song, u8* prt_data, u32 prt_size, int subso
             song->wavegen_order_table[i] = (u8)i;
         }
     }
+    if (!wave_order_is_permutation(song))
+        return 0;
 
     // Calculate sample sizes
     u32 total_chip_mem = 2;
     if (song->num_waves > 0) {
         WaveInfo* wi = song->waveinfo_ptr;
         for (int i = 0; i < song->num_waves; i++) {
+            if (wi->mix_wave > song->num_waves)
+                return 0;
             song->waveinfo_table[i] = wi;
             u32 std_len = ((u32)wi->sam_len + 1) * HQ_MAX_PERIOD;
             song->wavelength_table[i] = std_len;

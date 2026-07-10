@@ -762,9 +762,15 @@ void pretracker_wavegen_generate(PlayerState* player) {
         return;
     }
 
-    for (player->wg_wave_ord_num = 0; player->wg_wave_ord_num < song->num_waves; player->wg_wave_ord_num++) {
+    for (player->wg_wave_ord_num = 0;
+         player->wg_wave_ord_num < song->num_waves && player->wg_wave_ord_num < MAX_WAVES;
+         player->wg_wave_ord_num++) {
 
         u8 wave_idx = song->wavegen_order_table[player->wg_wave_ord_num];
+        if (wave_idx >= song->num_waves || wave_idx >= MAX_WAVES ||
+            player->wave_sample_table[wave_idx] == NULL ||
+            song->waveinfo_table[wave_idx] == NULL)
+            continue;
         f32* wave_buf = player->wave_sample_table[wave_idx];
         player->wg_curr_sample_ptr = wave_buf;
 
@@ -840,16 +846,18 @@ void pretracker_wavegen_generate(PlayerState* player) {
 
         // Wave mixing
         SongState* sv = player->my_song;
-        if (wi->mix_wave != 0) {
+        if (wi->mix_wave != 0 && wi->mix_wave <= sv->num_waves && wi->mix_wave <= MAX_WAVES) {
             u8 mix_idx = wi->mix_wave - 1;
             f32* mix_src = player->wave_sample_table[mix_idx];
-            u32 mix_len = sv->wavelength_table[mix_idx];
-            u16 curr_len = player->wg_curr_sample_len;
-            u16 min_len = (curr_len < (u16)mix_len) ? curr_len : (u16)mix_len;
+            if (mix_src != NULL) {
+                u32 mix_len = sv->wavelength_table[mix_idx];
+                u16 curr_len = player->wg_curr_sample_len;
+                u16 min_len = (curr_len < (u16)mix_len) ? curr_len : (u16)mix_len;
 
-            f32* dst = player->wg_curr_sample_ptr;
-            for (u16 j = 0; j < min_len; j++) {
-                dst[j] = pretracker_clamp_sample(dst[j] + mix_src[j]);
+                f32* dst = player->wg_curr_sample_ptr;
+                for (u16 j = 0; j < min_len; j++) {
+                    dst[j] = pretracker_clamp_sample(dst[j] + mix_src[j]);
+                }
             }
         }
 

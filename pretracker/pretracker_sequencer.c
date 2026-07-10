@@ -73,7 +73,7 @@ void pretracker_init_channel(PerChannelData* pcd, const SongState* song, u8 chan
     memset(pcd->track_delay_buffer, 0, sizeof(pcd->track_delay_buffer));
     pcd->pat_vol = MAX_VOLUME;
     pcd->track_delay_offset = 0xFF;
-    pcd->waveinfo_ptr = song->num_waves > 0 ? &song->waveinfo_ptr[0] : NULL;
+    pcd->waveinfo_ptr = song->num_waves > 0 && song->waveinfo_ptr != NULL ? &song->waveinfo_ptr[0] : NULL;
     pcd->adsr_phase = ADSR_PHASE_RELEASE;
     pcd->out.sam_ptr_offset = 0;
     pcd->out.length = 2;
@@ -135,7 +135,7 @@ void pretracker_player_init(PlayerState* player, f32* sample_buffer, SongState* 
     sample_buffer[0] = 0.0f;
     sample_buffer[1] = 0.0f;
     f32* sample = sample_buffer + 2;
-    for (int wave = 0; wave < song->num_waves; wave++) {
+    for (int wave = 0; wave < song->num_waves && wave < MAX_WAVES; wave++) {
         player->wave_sample_table[wave] = sample;
         sample += song->wavetotal_table[wave];
     }
@@ -603,9 +603,16 @@ static InstrumentStep decode_instrument_step(const u8* data) {
 
 static void activate_wave(PerChannelData* pcd, SongState* song, PlayerState* player,
                           u16 wave_idx, WaveActivationPolicy policy) {
+    if (wave_idx >= song->num_waves || wave_idx >= MAX_WAVES ||
+        player->wave_sample_table[wave_idx] == NULL)
+        return;
+
+    WaveInfo* wi = policy == WAVE_ACTIVATE_FALLBACK ? song->waveinfo_ptr : song->waveinfo_table[wave_idx];
+    if (wi == NULL)
+        return;
+
     u16 previous_loop = pcd->inst_loop_offset;
     pcd->inst_wave_num = wave_idx << 2;
-    WaveInfo* wi = policy == WAVE_ACTIVATE_FALLBACK ? song->waveinfo_ptr : song->waveinfo_table[wave_idx];
     pcd->waveinfo_ptr = wi;
     pcd->out.trigger = pcd->channel_mask;
     player->trigger_mask |= pcd->channel_mask;
@@ -665,7 +672,7 @@ static void activate_wave(PerChannelData* pcd, SongState* song, PlayerState* pla
 static void select_instrument_wave(PerChannelData* pcd, SongState* song, PlayerState* player,
                                    u8 command, u8 command_data) {
     u16 wave_idx = (u16)(command_data - 1);
-    if (wave_idx >= MAX_WAVES)
+    if (wave_idx >= song->num_waves || wave_idx >= MAX_WAVES)
         return;
     u16 wave_num4 = wave_idx << 2;
     if (wave_num4 == pcd->inst_wave_num)

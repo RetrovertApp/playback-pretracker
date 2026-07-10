@@ -5,6 +5,9 @@
 
 #define OLD_SIZE 0xA8
 #define V15_SIZE 0xE8
+#define ONE_WAVE_SIZE 0xE2
+#define TWO_WAVE_SIZE 0x10C
+#define ONE_WAVE_INFO_OFFSET 0xB8
 
 static void write_be32(u8* p, u32 value) {
     p[0] = (u8)(value >> 24);
@@ -46,6 +49,25 @@ static void make_v15_song(u8* data) {
 
     data[0x70] = 1;
     data[0x78] = 1;
+}
+
+static void make_one_wave_song(u8* data) {
+    memset(data, 0, ONE_WAVE_SIZE);
+    make_old_song(data);
+    write_be32(data + 0x10, 0xA0);
+    data[0x40] = 1;
+    data[0x41] = 1;
+    data[0x97] = 1;
+}
+
+static void make_two_wave_song(u8* data) {
+    memset(data, 0, TWO_WAVE_SIZE);
+    make_old_song(data);
+    write_be32(data + 0x10, 0xA0);
+    data[0x40] = 1;
+    data[0x41] = 2;
+    data[0x43] = 1;
+    data[0x97] = 1;
 }
 
 static void test_old_layout_and_pattern_table(void) {
@@ -208,6 +230,43 @@ static void test_rejects_invalid_instrument_lookup_index(void) {
     assert(pretracker_parse_song(&song, data, sizeof(data), 0) != 0);
 }
 
+static void test_rejects_invalid_wave_cross_references(void) {
+    u8 data[ONE_WAVE_SIZE];
+
+    make_one_wave_song(data);
+    struct PreSong* song = pre_song_create(data, sizeof(data));
+    assert(song != NULL);
+    pre_song_destroy(song);
+
+    const u8 generation_indices[] = {10, 24};
+    for (size_t i = 0; i < sizeof(generation_indices); ++i) {
+        make_one_wave_song(data);
+        data[0x42] = generation_indices[i];
+        assert(pre_song_create(data, sizeof(data)) == NULL);
+    }
+
+    make_one_wave_song(data);
+    data[ONE_WAVE_INFO_OFFSET + 0x1A] = 255;
+    assert(pre_song_create(data, sizeof(data)) == NULL);
+
+    make_one_wave_song(data);
+    data[0x98 + 1] = INST_CMD_SELECT_WAVE;
+    data[0x98 + 2] = 2;
+    assert(pre_song_create(data, sizeof(data)) == NULL);
+
+    make_one_wave_song(data);
+    data[0x98 + 1] = INST_CMD_SELECT_WAVE_NOSYNC;
+    data[0x98 + 2] = 0;
+    song = pre_song_create(data, sizeof(data));
+    assert(song != NULL);
+    pre_song_destroy(song);
+
+    u8 two_wave_data[TWO_WAVE_SIZE];
+    make_two_wave_song(two_wave_data);
+    two_wave_data[0x43] = 0;
+    assert(pre_song_create(two_wave_data, sizeof(two_wave_data)) == NULL);
+}
+
 static void test_v15_validates_every_subsong(void) {
     u8 data[V15_SIZE];
     SongState song;
@@ -271,6 +330,7 @@ int main(void) {
     test_empty_layouts_remain_bounded();
     test_rejects_invalid_position_pattern();
     test_rejects_invalid_instrument_lookup_index();
+    test_rejects_invalid_wave_cross_references();
     test_v15_validates_every_subsong();
     test_subsong_apply_is_bounded();
     test_subsong_rebuild_clears_stale_patterns();
