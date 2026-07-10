@@ -368,6 +368,10 @@ static void process_pitch(PerChannelData* pcd, PlayerState* player) {
 
     // Vibrato (asm:3738-3764)
     u8 vib_delay_lo = (u8)(pcd->vibrato_delay & 0xFF);
+    if (vib_delay_lo != 0) {
+        vib_delay_lo--;
+        pcd->vibrato_delay = (pcd->vibrato_delay & 0xFF00) | vib_delay_lo;
+    }
     if (vib_delay_lo == 0) {
         // Vibrato active
         i16 vib_speed = (i16)pcd->vibrato_speed;
@@ -386,9 +390,6 @@ static void process_pitch(PerChannelData* pcd, PlayerState* player) {
             pcd->vibrato_pos = (u16)vib_pos;
             d0_pitch += vib_pos >> 3;
         }
-    } else {
-        vib_delay_lo--;
-        pcd->vibrato_delay = (pcd->vibrato_delay & 0xFF00) | vib_delay_lo;
     }
 
     // Octave selection for high pitches (asm:3770-3847)
