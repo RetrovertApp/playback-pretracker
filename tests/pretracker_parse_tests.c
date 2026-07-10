@@ -302,6 +302,75 @@ static void test_minimum_sample_rate_preserves_decode_progress(void) {
     }
 }
 
+static void test_non_positive_decode_counts_do_not_change_state(void) {
+    const int invalid_counts[] = {0, -1};
+    u8 data[OLD_SIZE];
+    make_old_song(data);
+
+    for (size_t i = 0; i < sizeof(invalid_counts) / sizeof(invalid_counts[0]); ++i) {
+        struct PreSong* song = pre_song_create(data, sizeof(data));
+        f32 output[4] = {123.0f, 123.0f, 123.0f, 123.0f};
+        PrePlaybackState state_before;
+        assert(song != NULL);
+        pre_song_start(song);
+        state_before = *pre_song_get_playback_state(song);
+
+        assert(pre_song_decode(song, output, invalid_counts[i]) == 0);
+        for (size_t sample = 0; sample < sizeof(output) / sizeof(output[0]); ++sample)
+            assert(output[sample] == 123.0f);
+        assert(memcmp(pre_song_get_playback_state(song), &state_before, sizeof(state_before)) == 0);
+
+        assert(pre_song_decode(song, output, 2) == 2);
+        for (size_t sample = 0; sample < sizeof(output) / sizeof(output[0]); ++sample)
+            assert(output[sample] == 0.0f);
+        pre_song_destroy(song);
+    }
+}
+
+static void test_non_positive_scoped_decode_counts_do_not_change_state(void) {
+    const int invalid_counts[] = {0, -1};
+    u8 data[OLD_SIZE];
+    make_old_song(data);
+
+    for (size_t i = 0; i < sizeof(invalid_counts) / sizeof(invalid_counts[0]); ++i) {
+        struct PreSong* song = pre_song_create(data, sizeof(data));
+        f32 output[4] = {123.0f, 123.0f, 123.0f, 123.0f};
+        f32 scope[2] = {456.0f, 456.0f};
+        f32* scopes[] = {scope};
+        PrePlaybackState state_before;
+        assert(song != NULL);
+        pre_song_start(song);
+        state_before = *pre_song_get_playback_state(song);
+
+        assert(pre_song_decode_with_scopes(song, output, invalid_counts[i], scopes, 1) == 0);
+        for (size_t sample = 0; sample < sizeof(output) / sizeof(output[0]); ++sample)
+            assert(output[sample] == 123.0f);
+        for (size_t sample = 0; sample < sizeof(scope) / sizeof(scope[0]); ++sample)
+            assert(scope[sample] == 456.0f);
+        assert(memcmp(pre_song_get_playback_state(song), &state_before, sizeof(state_before)) == 0);
+
+        assert(pre_song_decode_with_scopes(song, output, 2, scopes, 1) == 2);
+        for (size_t sample = 0; sample < sizeof(output) / sizeof(output[0]); ++sample)
+            assert(output[sample] == 0.0f);
+        for (size_t sample = 0; sample < sizeof(scope) / sizeof(scope[0]); ++sample)
+            assert(scope[sample] == 0.0f);
+        pre_song_destroy(song);
+    }
+}
+
+static void test_mixer_rejects_non_positive_counts_before_touching_buffers(void) {
+    f32 output = 123.0f;
+    f32 scope = 456.0f;
+    f32* scopes[] = {&scope};
+
+    assert(pretracker_mixer_render(NULL, NULL, &output, 0, scopes, 1) == 0);
+    assert(output == 123.0f);
+    assert(scope == 456.0f);
+    assert(pretracker_mixer_render(NULL, NULL, &output, -1, scopes, 1) == 0);
+    assert(output == 123.0f);
+    assert(scope == 456.0f);
+}
+
 static void test_mixer_sample_rate_timing(void) {
     MixerState mixer;
     const u32 low_rates[] = {0, 1, 49, 50};
@@ -457,6 +526,9 @@ int main(void) {
     test_rejects_truncated_old_layouts();
     test_empty_layouts_remain_bounded();
     test_minimum_sample_rate_preserves_decode_progress();
+    test_non_positive_decode_counts_do_not_change_state();
+    test_non_positive_scoped_decode_counts_do_not_change_state();
+    test_mixer_rejects_non_positive_counts_before_touching_buffers();
     test_mixer_sample_rate_timing();
     test_rejects_invalid_position_pattern();
     test_rejects_invalid_instrument_lookup_index();

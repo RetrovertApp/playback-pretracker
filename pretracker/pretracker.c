@@ -218,6 +218,9 @@ void pre_song_start(PreSong* song) {
 
 
 int pre_song_decode(PreSong* song, f32* buffer, int num_frames) {
+    if (num_frames <= 0)
+        return 0;
+
     int result = pretracker_mixer_render(&song->player, &song->mixer, buffer, num_frames, nullptr, 0);
     update_playback_state(song);
     return result;
@@ -225,6 +228,9 @@ int pre_song_decode(PreSong* song, f32* buffer, int num_frames) {
 
 
 int pre_song_decode_with_scopes(PreSong* song, f32* buffer, int num_frames, f32** scopes, int num_scopes) {
+    if (num_frames <= 0)
+        return 0;
+
     int result = pretracker_mixer_render(&song->player, &song->mixer, buffer, num_frames, scopes, num_scopes);
     update_playback_state(song);
     return result;

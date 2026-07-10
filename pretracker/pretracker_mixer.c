@@ -178,6 +178,9 @@ static void mixer_sync_channels(PlayerState* player, MixerState* mixer) {
 
 int pretracker_mixer_render(PlayerState* player, MixerState* mixer, f32* buffer, int num_frames, f32** scopes,
                     int num_scopes) {
+    if (num_frames <= 0)
+        return 0;
+
     if (num_scopes > NUM_CHANNELS)
         num_scopes = NUM_CHANNELS;
 
