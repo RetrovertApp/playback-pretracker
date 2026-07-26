@@ -1,8 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
-project(pretracker LANGUAGES C)
+project(playback_pretracker LANGUAGES C)
 
 include(CTest)
+
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+include(PlaybackPlugin)
 
 add_library(pretracker STATIC
     pretracker/pretracker.c
@@ -21,6 +24,16 @@ set_target_properties(pretracker PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
 if(NOT MSVC)
     target_link_libraries(pretracker PUBLIC m)
+endif()
+
+add_library(pretracker_playback SHARED pretracker_plugin.c)
+target_link_libraries(pretracker_playback PRIVATE pretracker)
+rv_set_plugin_properties(pretracker_playback)
+
+# MSVC only enables its conforming C11 mode explicitly.
+if(MSVC)
+    target_compile_options(pretracker PRIVATE /std:c11 /Zc:__STDC__)
+    target_compile_options(pretracker_playback PRIVATE /std:c11 /Zc:__STDC__)
 endif()
 
 if(BUILD_TESTING)
