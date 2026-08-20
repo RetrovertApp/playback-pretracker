@@ -1,0 +1,9 @@
+[plugin]
+name = "pretracker"
+
+[data]
+entries = []
+
+[[fixtures]]
+file = "fixtures/retrovert_selftest.prt"
+sha256 = "770af303c21ac7d4f80e2d1f0e961c54afa6bd0163d33463219fa6a73226ff5a"

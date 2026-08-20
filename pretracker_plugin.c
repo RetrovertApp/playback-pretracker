@@ -148,7 +148,8 @@ static RVReadInfo pretracker_read_data(void* user_data, RVReadData dest) {
         return (RVReadInfo){ format, 0, RVReadStatus_Error };
     }
 
-    uint32_t max_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
+    uint32_t capacity_frames = dest.channels_output_max_bytes_size / (sizeof(float) * 2);
+    uint32_t max_frames = dest.info.frame_count < capacity_frames ? dest.info.frame_count : capacity_frames;
     float* output = (float*)dest.channels_output;
     uint32_t frames_written = 0;
 

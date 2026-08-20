@@ -1,2 +1,4 @@
 /CONTEXT.md
 /docs/
+build*/
+.deps/
