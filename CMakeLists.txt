@@ -51,6 +51,18 @@ if(BUILD_TESTING)
         )
     endif()
     add_test(NAME pretracker_parse_tests COMMAND pretracker_parse_tests)
+
+    add_executable(pretracker_audio_regression_tests tests/pretracker_audio_regression_tests.c)
+    target_link_libraries(pretracker_audio_regression_tests PRIVATE pretracker)
+    target_include_directories(pretracker_audio_regression_tests PRIVATE pretracker)
+    if(PRETRACKER_ENABLE_SANITIZERS)
+        target_compile_options(pretracker_audio_regression_tests PRIVATE
+            -fsanitize=address,undefined
+            -fno-omit-frame-pointer
+            -fno-sanitize-recover=all
+        )
+    endif()
+    add_test(NAME pretracker_audio_regression_tests COMMAND pretracker_audio_regression_tests)
 endif()
 
 if(PRETRACKER_BUILD_FUZZER)

@@ -99,6 +99,10 @@ For manual integration, compile every `pretracker/*.c` source as C11 and link
 the math library on platforms that require it. The core has no other external
 dependencies.
 
+The deterministic waveform regression policy, fixture provenance, and golden
+update procedure are documented in
+[`docs/golden-audio-tests.md`](../docs/golden-audio-tests.md).
+
 ## API overview
 
 All functions operate on an opaque `struct PreSong*` handle. The typical flow is:
